@@ -1,0 +1,24 @@
+{
+  "name": "FuelFinder",
+  "short_name": "FuelFinder",
+  "description": "Trova il carburante più conveniente",
+  "start_url": "index.php",
+  "display": "standalone",
+  "background_color": "#202b38",
+  "theme_color": "#202b38",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/483/483497.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/483/483497.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

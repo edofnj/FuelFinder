@@ -1,0 +1,20 @@
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Blocca cartelle includes/
+    RewriteRule ^includes/ - [F,L]
+
+    # Blocca JSON tranne manifest.json
+    RewriteCond %{REQUEST_URI} !manifest\.json$
+    RewriteRule \.json$ - [F,L]
+
+    # Blocca CSV
+    RewriteRule \.(csv)$ - [F,L]
+
+    # Blocca tutti i PHP tranne index.php
+    RewriteCond %{REQUEST_FILENAME} \.php$
+    RewriteCond %{REQUEST_URI} !/index\.php$
+    RewriteRule .* - [F,L]
+</IfModule>

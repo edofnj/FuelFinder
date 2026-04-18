@@ -1,0 +1,13 @@
+# Dati scaricati a runtime
+anagrafica.csv
+anagrafica.csv.ser
+prezzi.csv
+
+# Statistiche e sessioni locali
+data/
+
+# Sistema
+.DS_Store
+
+# Claude Code
+.claude/

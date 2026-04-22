@@ -268,6 +268,20 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(function(data) {
                 addrSugg.innerHTML = '';
                 if (!data || !data.length) { addrHideSugg(); return; }
+                // Dedup: Nominatim ritorna spesso piu voci con stesso civico (portoni, POI).
+                var seen = {};
+                data = data.filter(function(item) {
+                    var a = item.address || {};
+                    var street = (a.road || a.pedestrian || a.path || '').toLowerCase();
+                    var civ    = (a.house_number || '').toLowerCase();
+                    var city   = (a.city || a.town || a.village || a.municipality || '').toLowerCase();
+                    var key = (street && civ) ? (street + '|' + civ + '|' + city)
+                                              : (parseFloat(item.lat).toFixed(4) + ',' + parseFloat(item.lon).toFixed(4));
+                    if (seen[key]) return false;
+                    seen[key] = true;
+                    return true;
+                });
+                if (!data.length) { addrHideSugg(); return; }
                 data.forEach(function(item) {
                     var div = document.createElement('div');
                     div.className = 'addr-suggestion';

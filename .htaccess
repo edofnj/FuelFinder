@@ -1,20 +1,44 @@
 DirectoryIndex index.php
 
+# Blocca file nascosti (.git, .env, .htaccess stesso, .DS_Store)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Blocca estensioni sensibili ovunque
+<FilesMatch "\.(bak|log|sql|ser|ini|conf|old|swp|tmp|md)$">
+    Require all denied
+</FilesMatch>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Blocca cartelle includes/
+    # Blocca cartelle sensibili
     RewriteRule ^includes/ - [F,L]
+    RewriteRule ^cache/    - [F,L]
+    RewriteRule ^data/     - [F,L]
+    RewriteRule ^\.git/    - [F,L]
 
     # Blocca JSON tranne manifest.json
     RewriteCond %{REQUEST_URI} !manifest\.json$
     RewriteRule \.json$ - [F,L]
 
     # Blocca CSV
-    RewriteRule \.(csv)$ - [F,L]
+    RewriteRule \.csv$ - [F,L]
 
     # Blocca tutti i PHP tranne index.php
     RewriteCond %{REQUEST_FILENAME} \.php$
     RewriteCond %{REQUEST_URI} !/index\.php$
     RewriteRule .* - [F,L]
 </IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Permissions-Policy "geolocation=(self), camera=(), microphone=()"
+</IfModule>
+
+# Disabilita listing directory
+Options -Indexes

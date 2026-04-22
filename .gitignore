@@ -6,8 +6,14 @@ prezzi.csv
 # Statistiche e sessioni locali
 data/
 
+# Cache runtime
+cache/
+
 # Sistema
 .DS_Store
 
 # Claude Code
 .claude/
+
+# Secrets locali
+includes/config.local.php

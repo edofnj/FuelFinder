@@ -3,6 +3,13 @@ define('OSPZ_API', 'https://carburanti.mise.gov.it/ospzApi');
 define('URL_ANAGRAFICA', 'https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv');
 define('FILE_ANAGRAFICA', __DIR__ . '/../anagrafica.csv');
 
+// Carica secrets locali (gitignorati). Se mancano, chiave vuota → provider DE disattivato.
+if (is_file(__DIR__ . '/config.local.php')) {
+    require_once __DIR__ . '/config.local.php';
+} else {
+    define('TANKERKOENIG_KEY', '');
+}
+
 function ospzPost($endpoint, $payload) {
     $ch = curl_init(OSPZ_API . $endpoint);
     curl_setopt_array($ch, [

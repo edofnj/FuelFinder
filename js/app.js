@@ -8,9 +8,9 @@ document.addEventListener('DOMContentLoaded', function() {
         var cons = this.querySelector('input[name="consumo"]').value;
         var qta  = this.querySelector('input[name="quantita"]').value;
         var errors = [];
-        if (!lat || lat === '0') errors.push('GPS non disponibile — abilita la posizione');
-        if (!cons || parseFloat(cons) <= 0) errors.push('Inserisci il consumo dell\u2019auto (L/100km)');
-        if (!qta  || parseFloat(qta)  <= 0) errors.push('Inserisci i litri o il budget');
+        if (!lat || lat === '0') errors.push((window.FF_T && window.FF_T.err_gps) || 'GPS');
+        if (!cons || parseFloat(cons) <= 0) errors.push((window.FF_T && window.FF_T.err_consumption) || 'Consumo');
+        if (!qta  || parseFloat(qta)  <= 0) errors.push((window.FF_T && window.FF_T.err_liters) || 'Litri');
 
         if (errors.length > 0) {
             e.preventDefault();
@@ -30,7 +30,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 var el = document.querySelector('input[name="'+n+'"]');
                 if(el) el.addEventListener('input', function(){ this.style.borderColor=''; }, {once:true});
             });
+            return;
         }
+        showLoadingOverlay(false);
     });
 
     // SOS — copia valori da mainForm prima del submit
@@ -40,6 +42,74 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('sosModo').value       = document.querySelector('#mainForm select[name="modo"]').value;
         document.getElementById('sosMarcheJson').value = document.getElementById('marcheJson').value;
         document.getElementById('sosAddrLabel').value  = document.getElementById('addrLabelInput').value;
+        showLoadingOverlay(true);
+    });
+
+    var progressTimer = null;
+
+    function showLoadingOverlay(isSOS) {
+        var ov = document.getElementById('loadingOverlay');
+        if (!ov) return;
+        ov.removeAttribute('hidden');
+        ov.classList.add('is-visible');
+
+        var bar = document.getElementById('progressBar');
+        var step = document.getElementById('loadingStep');
+        if (!bar || !step) return;
+
+        // Step plausibili: il server fa MIMIT -> (Tankerkoenig se DE) -> OSRM parallelo -> calcoli
+        var T = window.FF_T || {};
+        var steps = isSOS ? [
+            { at: 0,    pct: 10, text: T.step_sos_1 },
+            { at: 400,  pct: 40, text: T.step_sos_2 },
+            { at: 1200, pct: 75, text: T.step_sos_3 },
+            { at: 2400, pct: 92, text: T.step_sos_4 }
+        ] : [
+            { at: 0,    pct: 8,  text: T.step_1 },
+            { at: 300,  pct: 22, text: T.step_2 },
+            { at: 1400, pct: 45, text: T.step_3 },
+            { at: 3000, pct: 68, text: T.step_4 },
+            { at: 5000, pct: 85, text: T.step_5 },
+            { at: 7500, pct: 93, text: T.step_6 }
+        ];
+
+        bar.style.width = '0%';
+        step.textContent = T.initializing || '…';
+
+        var start = Date.now();
+        if (progressTimer) clearInterval(progressTimer);
+        progressTimer = setInterval(function() {
+            var elapsed = Date.now() - start;
+            var active = steps[0];
+            for (var i = 0; i < steps.length; i++) {
+                if (elapsed >= steps[i].at) active = steps[i];
+            }
+            // Interpolazione morbida fino al prossimo step
+            var next = null;
+            for (var j = 0; j < steps.length; j++) {
+                if (steps[j].at > elapsed) { next = steps[j]; break; }
+            }
+            var targetPct = active.pct;
+            if (next) {
+                var span = next.at - active.at;
+                var done = Math.min(1, (elapsed - active.at) / span);
+                targetPct = active.pct + (next.pct - active.pct) * done;
+            } else {
+                // Dopo ultimo step, avanzamento lento asintotico al 98%
+                var extra = Math.min(8, (elapsed - active.at) / 1000);
+                targetPct = Math.min(98, active.pct + extra);
+            }
+            bar.style.width = targetPct.toFixed(1) + '%';
+            if (step.textContent !== active.text) step.textContent = active.text;
+        }, 120);
+    }
+    // Nascondi overlay se utente torna con back/forward (bfcache)
+    window.addEventListener('pageshow', function(e) {
+        var ov = document.getElementById('loadingOverlay');
+        if (!ov) return;
+        ov.classList.remove('is-visible');
+        ov.setAttribute('hidden', '');
+        if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
     });
 
     // GPS + INDIRIZZO MANUALE
@@ -54,9 +124,37 @@ document.addEventListener('DOMContentLoaded', function() {
     var manualActive   = false;   // true quando l'utente usa un indirizzo manuale
     var gpsLat = 0, gpsLon = 0;  // coords GPS quando disponibile
 
+    function detectCountry(lat, lon) {
+        if (lat >= 35.4 && lat <= 47.2 && lon >= 6.5 && lon <= 18.6) return 'IT';
+        if (lat >= 47.2 && lat <= 55.1 && lon >= 5.8 && lon <= 15.1) return 'DE';
+        return null;
+    }
+
+    function updateFuelOptions(lat, lon) {
+        var cc = detectCountry(parseFloat(lat), parseFloat(lon));
+        if (!cc) return;
+        var sel = document.getElementById('tipoSelect');
+        if (!sel) return;
+        var current = sel.value;
+        var firstAvailable = null;
+        Array.prototype.forEach.call(sel.options, function(opt){
+            var allowed = (opt.getAttribute('data-countries') || '').split(',');
+            var ok = allowed.indexOf(cc) !== -1;
+            opt.hidden = !ok;
+            opt.disabled = !ok;
+            if (ok && firstAvailable === null) firstAvailable = opt.value;
+        });
+        // Se opzione attuale non più disponibile, fallback alla prima valida
+        var curOpt = sel.querySelector('option[value="' + current + '"]');
+        if (curOpt && (curOpt.hidden || curOpt.disabled) && firstAvailable) {
+            sel.value = firstAvailable;
+        }
+    }
+
     function gpsSetCoords(lat, lon, label, isManual) {
         document.querySelectorAll('.lat-hidden').forEach(function(el){ el.value = lat; });
         document.querySelectorAll('.lon-hidden').forEach(function(el){ el.value = lon; });
+        updateFuelOptions(lat, lon);
         document.getElementById('calcBtn').disabled = false;
         document.getElementById('sosBtn').disabled  = false;
         st.innerText = '✅ ' + (label || 'Posizione impostata');
@@ -81,7 +179,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     gpsSwitchBtn.addEventListener('click', function() {
-        gpsSetCoords(gpsLat, gpsLon, 'GPS pronto', false);
+        var T = window.FF_T || {};
+        gpsSetCoords(gpsLat, gpsLon, T.gps_ready || 'GPS', false);
         addrBox.style.display = 'none';
         addrInput.value = '';
     });
@@ -101,9 +200,10 @@ document.addEventListener('DOMContentLoaded', function() {
         gpsSetCoords(FF_SAVED_LAT, FF_SAVED_LON, FF_ADDR_LABEL, true);
     }
 
+    var T2 = window.FF_T || {};
     if ('geolocation' in navigator) {
         if (!FF_ADDR_LABEL) {
-            st.innerText = '📍 Ricerca GPS in corso…';
+            st.innerText = T2.gps_searching || '📍 GPS…';
             st.style.color = '#e3b341';
         }
         navigator.geolocation.getCurrentPosition(
@@ -111,15 +211,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 gpsLat = p.coords.latitude;
                 gpsLon = p.coords.longitude;
                 if (manualActive) {
-                    // GPS arrivato ma l'utente sta usando l'indirizzo: mostra solo il tasto switch
                     gpsSwitchBtn.style.display = 'block';
                 } else {
-                    gpsSetCoords(gpsLat, gpsLon, 'GPS pronto', false);
+                    gpsSetCoords(gpsLat, gpsLon, T2.gps_ready || 'GPS', false);
                 }
             },
             function() {
                 if (!manualActive) {
-                    st.innerText = '❌ GPS non trovato — inserisci un indirizzo';
+                    st.innerText = T2.gps_not_found || 'GPS ❌';
                     st.style.color = 'var(--red)';
                     gpsOpenManual();
                 }
@@ -128,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
         );
     } else {
         if (!manualActive) {
-            st.innerText = '❌ GPS non disponibile — inserisci un indirizzo';
+            st.innerText = T2.gps_unavailable || 'GPS ❌';
             st.style.color = 'var(--red)';
             gpsOpenManual();
         }
@@ -148,13 +247,14 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(addrTimer);
         addrHideSugg();
 
+        var T = window.FF_T || {};
         var hint = document.getElementById('addrHint');
         if (q.length > 2 && !addrHasCivico(q)) {
-            hint.textContent = '// aggiungi il numero civico per una posizione precisa';
+            hint.textContent = T.addr_need_num;
             hint.style.color = 'var(--accent)';
             return;
         } else {
-            hint.textContent = '// via + numero civico obbligatori';
+            hint.textContent = T.addr_hint;
             hint.style.color = 'var(--muted)';
         }
 
@@ -162,7 +262,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         addrTimer = setTimeout(function() {
             // Con civico: layer=address prioritizza risultati a livello di numero civico
-            var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=it&addressdetails=1&layer=address&q=' + encodeURIComponent(q);
+            var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=it,de&addressdetails=1&layer=address&q=' + encodeURIComponent(q);
             fetch(url, { headers: { 'Accept-Language': 'it', 'User-Agent': 'FuelFinder/1.0' } })
             .then(function(r) { return r.json(); })
             .then(function(data) {

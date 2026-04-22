@@ -3,15 +3,19 @@
     var TKEY = 'fuelfinder_tutorial_done';
     var cur = 0;
     var dir = 1; // 1 = avanti, -1 = indietro
-    var steps = [
-        { icon: '📍', title: 'Dove sei?',             desc: 'FuelFinder trova automaticamente dove ti trovi. Quando il telefono o il computer chiede il permesso per usare la posizione, premi Consenti — senza questo non riesce a cercare i distributori vicino a te.' },
-        { icon: '🚗', title: 'Il mio garage',         desc: 'Puoi salvare la tua auto con il tipo di carburante e quanto consuma. La prossima volta che apri FuelFinder non dovrai reinserire nulla — basta selezionare la tua auto e via!' },
-        { icon: '🔍', title: 'Come fare una ricerca', desc: 'Scegli il tipo di carburante, quanti km vuoi cercare intorno a te, e quanti litri vuoi fare. FuelFinder calcola quanto spendi davvero, contando anche i soldi per andarci e tornare.' },
-        { icon: '⚙️', title: 'Filtra per marca',      desc: 'Hai una carta fedeltà Eni o preferisci sempre Q8? Apri il pannello Filtra marche e seleziona solo i distributori che vuoi vedere. La scelta viene ricordata anche la prossima volta.' },
-        { icon: '🚨', title: 'Sto finendo!',          desc: 'Stai finendo la benzina? Premi il tasto rosso SOS e trovi subito il distributore più vicino a te in pochi secondi, senza altri calcoli.' },
-        { icon: '💰', title: 'Il conto completo',     desc: 'Per ogni distributore vedi tre numeri: quanto spendi per il carburante, quanto costa il viaggio per andarci e tornare, e il totale finale. Così sai davvero quale conviene.' },
-        { icon: '📲', title: 'Salvala sul telefono',  desc: 'Puoi usare FuelFinder come se fosse un\'app! Su iPhone apri questa pagina con Safari, tocca il tasto Condividi in basso e scegli Aggiungi a schermata Home. Su Android tocca i tre puntini in alto e scegli Aggiungi a schermata Home.' }
-    ];
+    function getSteps() {
+        var T = window.FF_T || {};
+        return [
+            { icon: '📍', title: T.tut_1_title, desc: T.tut_1_desc },
+            { icon: '🚗', title: T.tut_2_title, desc: T.tut_2_desc },
+            { icon: '🔍', title: T.tut_3_title, desc: T.tut_3_desc },
+            { icon: '⚙️', title: T.tut_4_title, desc: T.tut_4_desc },
+            { icon: '🚨', title: T.tut_5_title, desc: T.tut_5_desc },
+            { icon: '💰', title: T.tut_6_title, desc: T.tut_6_desc },
+            { icon: '📲', title: T.tut_7_title, desc: T.tut_7_desc }
+        ];
+    }
+    var steps = getSteps();
 
     function render(animated) {
         var overlay = document.getElementById('tutorialOverlay');
@@ -63,7 +67,8 @@
             dotsEl.appendChild(dot);
         });
 
-        btnNext.textContent = cur === steps.length - 1 ? 'Inizia →' : 'Avanti →';
+        var T = window.FF_T || {};
+        btnNext.textContent = cur === steps.length - 1 ? (T.tutorial_start || 'Start') : (T.tutorial_next || 'Next');
 
         if (btnBack) {
             btnBack.style.display = cur === 0 ? 'none' : 'inline-flex';
@@ -94,11 +99,13 @@
     window.tutorialOpen = function() {
         cur = 0;
         dir = 1;
+        steps = getSteps();
         render(false);
     };
 
     // Auto-show on first visit — wait for DOM
     document.addEventListener('DOMContentLoaded', function() {
+        steps = getSteps();
         try {
             if (!localStorage.getItem(TKEY)) render(false);
         } catch(e) { render(false); }

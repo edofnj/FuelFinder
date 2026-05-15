@@ -17,3 +17,5 @@ cache/
 
 # Secrets locali
 includes/config.local.php
+docker-compose.yml
+.user.ini

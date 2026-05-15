@@ -10,18 +10,21 @@ require 'includes/data.php';
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>FuelFinder</title>
-<link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/483/483497.png">
+<link rel="icon" type="image/svg+xml" href="img/logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d1117">
+<meta name="theme-color" content="#0d0d1a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/483/483497.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 
 <div class="loading-overlay" id="loadingOverlay" aria-hidden="true" hidden>
     <div class="loading-box">
@@ -33,7 +36,7 @@ require 'includes/data.php';
 
 <div class="page-wrap">
     <header class="site-header">
-        <div class="logo-icon">&#9981;</div>
+        <div class="logo-icon"><img src="img/logo.svg" alt="FuelFinder"></div>
         <div class="logo-text">Fuel<span>Finder</span></div>
         <div class="header-badge"><?= t('header_badge') ?></div>
         <div class="lang-switcher" title="<?= t('lang_label') ?>">
@@ -41,6 +44,11 @@ require 'includes/data.php';
             <a href="?lang=de" class="lang-opt<?= currentLang()==='de'?' active':'' ?>">DE</a>
         </div>
     </header>
+
+    <nav class="page-nav">
+        <a href="index.php" class="nav-tab active"><?= t('nav_nearby') ?></a>
+        <a href="route.php" class="nav-tab"><?= t('nav_route') ?></a>
+    </nav>
 
     <div class="layout">
         <aside class="panel-left">
@@ -53,7 +61,6 @@ require 'includes/data.php';
                 <input type="hidden" name="consumo" id="sosConsumo">
                 <input type="hidden" name="quantita" id="sosQuantita">
                 <input type="hidden" name="modo" id="sosModo">
-                <input type="hidden" name="marche_json" id="sosMarcheJson">
                 <input type="hidden" name="addr_label" id="sosAddrLabel">
                 <button type="submit" class="sos-btn" id="sosBtn" disabled><?= t('sos_btn') ?></button>
             </form>
@@ -151,27 +158,6 @@ require 'includes/data.php';
                         </div>
                     </div>
 
-                    <!-- BRAND FILTER -->
-                    <div class="brand-filter-wrap">
-                        <div class="brand-filter-header" onclick="toggleBrandFilter()">
-                            <div class="brand-filter-left">
-                                <span class="section-label"><?= t('filter_brands') ?></span>
-                                <span class="brand-filter-count" id="brandFilterCount"><?= t('all_f') ?></span>
-                            </div>
-                            <span class="brand-filter-chevron" id="brandChevron">&#9660;</span>
-                        </div>
-                        <div class="brand-filter-body" id="brandFilterBody">
-                            <div class="brand-filter-actions">
-                                <button type="button" class="btn-brand-all" onclick="selectAllBrands()"><?= t('all_btn') ?></button>
-                                <button type="button" class="btn-brand-none" onclick="deselectAllBrands()"><?= t('none_btn') ?></button>
-                            </div>
-                            <div class="brand-checkbox-grid" id="brandCheckboxGrid">
-                                <span style="color:var(--muted);font-size:0.75rem;font-family:'JetBrains Mono',monospace"><?= t('loading') ?></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <input type="hidden" name="marche_json" id="marcheJson" value="">
                     <input type="hidden" name="lat" class="lat-hidden">
                     <input type="hidden" name="lon" class="lon-hidden">
 

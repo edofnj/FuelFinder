@@ -62,8 +62,8 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_TIMEOUT        => 6,
+            CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_USERAGENT      => 'FuelFinder/1.0',
         ]);
@@ -80,17 +80,15 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
         $running = null;
         do {
             curl_multi_exec($mh, $running);
-            curl_multi_select($mh, 0.1);
+            if ($running) curl_multi_select($mh, 0.02);
         } while ($running > 0);
 
-        $failed = [];
         for ($k = $pos; $k < $windowEnd; $k++) {
             $i = $indices[$k];
             $resp = curl_multi_getcontent($handles[$i]);
             $code = curl_getinfo($handles[$i], CURLINFO_HTTP_CODE);
             curl_multi_remove_handle($mh, $handles[$i]);
             curl_close($handles[$i]);
-            $okThis = false;
             if ($resp && $code === 200) {
                 $data = json_decode($resp, true);
                 $dm = $data['routes'][0]['distance'] ?? null;
@@ -99,50 +97,17 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
                     $results[$i]['distanza'] = $km;
                     $results[$i]['road_ok']  = true;
                     cacheSet('osrm', $toFetch[$i], $km);
-                    $okThis = true;
                 }
             }
-            if (!$okThis) $failed[] = $i;
         }
         $pos = $windowEnd;
-
-        // Retry una volta sui fallimenti del batch (seriale, timeout breve)
-        foreach ($failed as $i) {
-            $url = 'https://router.project-osrm.org/route/v1/driving/'
-                 . $uLon . ',' . $uLat . ';'
-                 . $results[$i]['lon'] . ',' . $results[$i]['lat']
-                 . '?overview=false&alternatives=false&steps=false';
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 8,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_USERAGENT      => 'FuelFinder/1.0',
-            ]);
-            $resp = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            if ($resp && $code === 200) {
-                $data = json_decode($resp, true);
-                $dm = $data['routes'][0]['distance'] ?? null;
-                if ($dm !== null && $dm > 0) {
-                    $km = round($dm / 1000, 2);
-                    $results[$i]['distanza'] = $km;
-                    $results[$i]['road_ok']  = true;
-                    cacheSet('osrm', $toFetch[$i], $km);
-                }
-            }
-        }
     }
     curl_multi_close($mh);
 }
 
-// Chiave cache search: coord a ~100m + raggio + fuel + marche.
-function searchCacheKey($uLat, $uLon, $raggio, $fuel, $marche) {
-    $m = $marche ? implode(',', $marche) : '';
-    return sprintf('%.3f,%.3f|r=%s|f=%s|m=%s',
-        round($uLat, 3), round($uLon, 3), $raggio, $fuel, $m);
+function searchCacheKey($uLat, $uLon, $raggio, $fuel) {
+    return sprintf('%.3f,%.3f|r=%s|f=%s',
+        round($uLat, 3), round($uLon, 3), $raggio, $fuel);
 }
 
 $results     = [];
@@ -152,7 +117,6 @@ $valConsumo  = $_POST['consumo']     ?? '';
 $valQuantita = $_POST['quantita']    ?? '';
 $valModo     = $_POST['modo']        ?? 'litri';
 $valRaggio   = $_POST['raggio']      ?? '5';
-$valMarche   = (!empty($_POST['marche_json'])) ? json_decode($_POST['marche_json'], true) : [];
 $isSOS       = isset($_POST['sos_mode']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) {
@@ -163,8 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
     $uRaggio  = (float)$valRaggio;
 
     // Cache search completo (1h TTL): se hit, bypassa tutto (MIMIT + OSRM).
-    // Non attivo in SOS (vogliamo sempre distanze fresche) e quando ci sono marche filtrate (troppe chiavi).
-    $searchKey = searchCacheKey($uLat, $uLon, $uRaggio, $valTipo, $valMarche);
+    // Non attivo in SOS (vogliamo sempre distanze fresche).
+    $searchKey = searchCacheKey($uLat, $uLon, $uRaggio, $valTipo);
     $searchCacheTTL = 3600;
     $stations = null;
     $cachedStations = $isSOS ? null : cacheGet('search', $searchKey, $searchCacheTTL);
@@ -186,16 +150,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
         foreach ($stations as $s) {
             $brand = $s['brand'];
 
-            // Filtro marche
-            if (!empty($valMarche)) {
-                $match = false;
-                foreach ($valMarche as $m) {
-                    if (stripos($brand, $m) !== false || stripos($m, $brand) !== false) {
-                        $match = true; break;
-                    }
-                }
-                if (!$match) continue;
-            }
 
             $dataFmt = '';
             if (!empty($s['insertDate'])) {
@@ -234,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
         if (count($results) > 40) $results = array_slice($results, 0, 40);
 
         // Distanze reali su strada su tutti i risultati (anche in SOS).
-        applyRoadDistances($uLat, $uLon, $results, 10, $uRaggio);
+        applyRoadDistances($uLat, $uLon, $results, 20, $uRaggio);
 
         // Salva cache search (solo se non SOS e c'erano risultati)
         if (!$isSOS && $cachedStations === null && !empty($stations)) {

@@ -53,31 +53,6 @@ function caricaAnagrafica() {
 // Avvia aggiornamento asincrono dell'anagrafica (non blocca la request)
 aggiornaAnagrafica();
 
-// Endpoint brands: cache 24h
-if (isset($_GET['get_brands'])) {
-    require_once __DIR__ . '/cache.php';
-    $cached = cacheGet('brands', 'all', 86400);
-    if ($cached !== null) {
-        header('Content-Type: application/json');
-        header('X-Cache: HIT');
-        echo json_encode($cached);
-        exit;
-    }
-    $data = ospzGet('/registry/brands');
-    $brands = [];
-    if (!empty($data['results'])) {
-        foreach ($data['results'] as $b) {
-            $name = trim($b['description'] ?? '');
-            if ($name !== '') $brands[] = $name;
-        }
-        sort($brands);
-    }
-    if (!empty($brands)) cacheSet('brands', 'all', array_values($brands));
-    header('Content-Type: application/json');
-    header('X-Cache: MISS');
-    echo json_encode(array_values($brands));
-    exit;
-}
 
 // Mappa tipo carburante → fuelId API MIMIT
 function tipoToFuelId($tipo) {

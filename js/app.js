@@ -40,7 +40,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('sosConsumo').value    = document.querySelector('#mainForm input[name="consumo"]').value;
         document.getElementById('sosQuantita').value   = document.querySelector('#mainForm input[name="quantita"]').value;
         document.getElementById('sosModo').value       = document.querySelector('#mainForm select[name="modo"]').value;
-        document.getElementById('sosMarcheJson').value = document.getElementById('marcheJson').value;
         document.getElementById('sosAddrLabel').value  = document.getElementById('addrLabelInput').value;
         showLoadingOverlay(true);
     });
@@ -261,16 +260,36 @@ document.addEventListener('DOMContentLoaded', function() {
         if (q.length < 4 || !addrHasCivico(q)) return;
 
         addrTimer = setTimeout(function() {
-            // Con civico: layer=address prioritizza risultati a livello di numero civico
-            var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=it,de&addressdetails=1&layer=address&q=' + encodeURIComponent(q);
-            fetch(url, { headers: { 'Accept-Language': 'it', 'User-Agent': 'FuelFinder/1.0' } })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
+            var base = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=it,de&addressdetails=1';
+            var hdrs = { 'Accept-Language': 'it', 'User-Agent': 'FuelFinder/1.0' };
+            var fetchList = [
+                fetch(base + '&layer=address&q=' + encodeURIComponent(q), { headers: hdrs })
+                    .then(function(r) { return r.json(); }).catch(function() { return []; })
+            ];
+            var numM = q.match(/^([^0-9,]+?)\s+(\d+[a-zA-Z]?)\s*(?:,\s*(.+))?$/);
+            if (numM) {
+                var sStreet = numM[1].trim();
+                var sNum    = numM[2];
+                var sCity   = (numM[3] || '').trim();
+                var structUrl = base + '&housenumber=' + encodeURIComponent(sNum)
+                              + '&street=' + encodeURIComponent(sStreet)
+                              + (sCity ? '&city=' + encodeURIComponent(sCity) : '');
+                fetchList.push(
+                    fetch(structUrl, { headers: hdrs })
+                        .then(function(r) { return r.json(); }).catch(function() { return []; })
+                );
+            }
+            Promise.all(fetchList).then(function(results) {
+                var allItems = [];
+                results.forEach(function(r) { if (Array.isArray(r)) allItems = allItems.concat(r); });
+                allItems.sort(function(a, b) {
+                    return ((b.address && b.address.house_number) ? 1 : 0)
+                         - ((a.address && a.address.house_number) ? 1 : 0);
+                });
                 addrSugg.innerHTML = '';
-                if (!data || !data.length) { addrHideSugg(); return; }
-                // Dedup: Nominatim ritorna spesso piu voci con stesso civico (portoni, POI).
+                if (!allItems.length) { addrHideSugg(); return; }
                 var seen = {};
-                data = data.filter(function(item) {
+                var data = allItems.filter(function(item) {
                     var a = item.address || {};
                     var street = (a.road || a.pedestrian || a.path || '').toLowerCase();
                     var civ    = (a.house_number || '').toLowerCase();
@@ -282,14 +301,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     return true;
                 });
                 if (!data.length) { addrHideSugg(); return; }
-                data.forEach(function(item) {
+                data.slice(0, 5).forEach(function(item) {
                     var div = document.createElement('div');
                     div.className = 'addr-suggestion';
-                    // Costruisce label leggibile con civico in evidenza
                     var a = item.address || {};
                     var street = a.road || a.pedestrian || a.path || '';
                     var civico = a.house_number || '';
                     var city   = a.city || a.town || a.village || a.municipality || '';
+                    if (!civico && street) {
+                        var firstPart = item.display_name.split(',')[0].trim();
+                        if (/^\d+[a-zA-Z]?$/.test(firstPart)) civico = firstPart;
+                    }
+                    if (!civico && street) {
+                        var qNum = q.match(/\b(\d+[a-zA-Z]?)\b/);
+                        if (qNum) civico = qNum[1];
+                    }
                     var main   = (street && civico) ? street + ' ' + civico + (city ? ', ' + city : '')
                                                     : item.display_name.split(', ').slice(0, 3).join(', ');
                     var detail = city && !(main.includes(city)) ? city : '';
@@ -311,8 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     addrSugg.appendChild(div);
                 });
                 addrSugg.style.display = 'block';
-            })
-            .catch(function() { addrHideSugg(); });
+            });
         }, 250);
     });
 
@@ -480,131 +505,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // BRAND FILTER
-    window._bf = {
-        brands: [],
-        sel: {},
-        loaded: false
-    };
-    var BKEY = 'fuelfinder_brands_sel';
-
-    function bfSave() {
-        var desel = window._bf.brands.filter(function(b){ return !window._bf.sel[b]; });
-        try {
-            if (desel.length === 0) localStorage.removeItem(BKEY);
-            else localStorage.setItem(BKEY, JSON.stringify(desel));
-        } catch(e) {}
-    }
-
-    function bfRestore() {
-        try {
-            var desel = JSON.parse(localStorage.getItem(BKEY));
-            if (Array.isArray(desel)) {
-                desel.forEach(function(b) { window._bf.sel[b] = false; });
-            }
-        } catch(e) {}
-    }
-
-    function bfUpdateCount() {
-        var el  = document.getElementById('brandFilterCount');
-        var hid = document.getElementById('marcheJson');
-        if (!el) return;
-        var all = window._bf.brands;
-        var sel = all.filter(function(b){ return window._bf.sel[b]; });
-        el.textContent = (sel.length === all.length) ? 'tutte' : sel.length + '/' + all.length;
-        if (hid) hid.value = (sel.length === all.length) ? '' : JSON.stringify(sel);
-        bfSave();
-    }
-
-    function bfRender() {
-        var grid = document.getElementById('brandCheckboxGrid');
-        if (!grid) return;
-        var all = window._bf.brands;
-
-        grid.innerHTML = '';
-
-        if (all.length === 0) {
-            grid.innerHTML = '<span style="color:var(--muted);font-size:0.75rem;grid-column:1/-1">Nessuna marca trovata</span>';
-            bfUpdateCount();
-            return;
-        }
-
-        all.forEach(function(b) {
-            var lbl = document.createElement('label');
-            lbl.className = 'brand-cb-label';
-            lbl.title = b;
-
-            var cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = !!window._bf.sel[b];
-            cb.addEventListener('change', function() {
-                window._bf.sel[b] = this.checked;
-                bfUpdateCount();
-            });
-            lbl.appendChild(cb);
-            var txt = document.createElement('span');
-            txt.textContent = b;
-            lbl.appendChild(txt);
-            grid.appendChild(lbl);
-        });
-
-        bfUpdateCount();
-    }
-
-    function bfLoad() {
-        if (window._bf.loaded) return;
-        window._bf.loaded = true;
-        var grid = document.getElementById('brandCheckboxGrid');
-        if (grid) grid.innerHTML = '<span style="color:var(--muted);font-size:0.75rem;">Caricamento...</span>';
-        fetch('?get_brands=1')
-            .then(function(r) { return r.json(); })
-            .then(function(brands) {
-                window._bf.brands = brands;
-                brands.forEach(function(b) { window._bf.sel[b] = true; });
-                bfRestore();
-                bfRender();
-                var hid = document.getElementById('marcheJson');
-                if (hid && hid.value) {
-                    document.getElementById('brandFilterBody').classList.add('open');
-                    document.getElementById('brandChevron').classList.add('open');
-                }
-            })
-            .catch(function() {
-                window._bf.loaded = false;
-                var g = document.getElementById('brandCheckboxGrid');
-                if (g) g.innerHTML = '<span style="color:var(--red);font-size:0.75rem;">Errore caricamento</span>';
-            });
-    }
-
-    window.toggleBrandFilter = function() {
-        var body    = document.getElementById('brandFilterBody');
-        var chevron = document.getElementById('brandChevron');
-        if (!body) return;
-        body.classList.toggle('open');
-        chevron.classList.toggle('open');
-        if (body.classList.contains('open')) bfLoad();
-    };
-
-    window.selectAllBrands = function() {
-        window._bf.brands.forEach(function(b){ window._bf.sel[b] = true; });
-        bfRender();
-    };
-
-    window.deselectAllBrands = function() {
-        window._bf.brands.forEach(function(b){ window._bf.sel[b] = false; });
-        bfRender();
-    };
-
-    (function(){
-        try{
-            var saved = JSON.parse(localStorage.getItem(BKEY));
-            if (Array.isArray(saved) && saved.length > 0) {
-                bfLoad();
-                document.getElementById('brandFilterBody').classList.add('open');
-                document.getElementById('brandChevron').classList.add('open');
-            }
-        } catch(e) {}
-    })();
 
 }); // end DOMContentLoaded
 

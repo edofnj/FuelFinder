@@ -4,19 +4,54 @@ PWA per trovare i distributori di carburante più convenienti vicino a te, con c
 
 ## Funzionalità
 
-- **Ricerca per posizione** — GPS automatico o ricerca per indirizzo con autocomplete (Nominatim/OpenStreetMap, supporto indirizzi IT e DE)
+### Ricerca distributori vicini (`index.php`)
+
+- **Ricerca per posizione** — GPS automatico o ricerca per indirizzo con autocomplete (Nominatim/OpenStreetMap, IT e DE)
 - **Multi-paese** — provider Italia (MIMIT) e Germania (Tankerkoenig/MTS-K), rilevamento automatico + cross-border
-- **Filtro per tipo carburante** — benzina, diesel (+ GPL, metano solo IT; opzioni nascoste fuori paese)
+- **Filtro per tipo carburante** — benzina, diesel, GPL, metano; opzioni IT-only (GPL/metano) nascoste automaticamente in Germania
 - **Filtro per marca** — seleziona solo i brand preferiti (selezione ricordata in localStorage)
+- **Raggio ricerca** — 5 / 10 / 20 km configurabile
 - **Distanze stradali reali** — calcolo via OSRM `/route` in parallelo (non linea d'aria), con cache 30 giorni
-- **Calcolo costo totale** — prezzo carburante + costo del viaggio andata/ritorno in base ai consumi del veicolo
-- **Modalità SOS** — trova il distributore più vicino in assoluto, senza filtri
-- **Garage veicoli** — salva i tuoi veicoli in locale (localStorage) con tipo carburante e consumi
+- **Calcolo costo totale** — prezzo carburante + costo del viaggio andata/ritorno in base ai consumi
+- **Modalità litri o euro** — inserisci quanti litri vuoi fare oppure il budget disponibile
+- **Modalità SOS** — trova il distributore più vicino in assoluto, senza filtri, con un click
+- **Garage veicoli** — salva i tuoi veicoli (nome, tipo carburante, consumi L/100km), selezionane uno per pre-compilare il form; supporto modifica e cancellazione
+- **Indirizzo manuale** — campo con autocomplete Nominatim per cercare da un punto diverso dal GPS; tasto per tornare al GPS quando disponibile
+- **Data aggiornamento prezzi** — ogni card mostra la data dell'ultimo aggiornamento del prezzo
+- **Link Google Maps** — ogni distributore è cliccabile e apre Google Maps per la navigazione
+- **Scroll automatico** — dopo il calcolo, la pagina scrolla ai risultati
+- **Form validation** — messaggi di errore inline per GPS mancante, consumi o quantità non inseriti
+
+### Pianificazione percorso (`route.php`)
+
+- **Inserimento partenza e arrivo** — autocomplete Nominatim per entrambi i campi
+- **GPS come partenza o arrivo** — pulsanti dedicati per usare la posizione GPS corrente
+- **Pin draggabili sulla mappa** — prima del calcolo, i punti A/B sono pin trascinabili per correggere la posizione; il drag aggiorna automaticamente le coordinate
+- **Calcolo percorso via OSRM** — distanza totale in km e durata stimata in minuti
+- **Distributori lungo il percorso** — ricerca in un corridoio configurabile (1/2/5/10 km) attorno alla rotta
+- **Filtro km iniziali** — limita la ricerca ai primi 50/100/200/300 km del percorso
+- **Evita autostrada / caselli** — checkbox per escludere strade a pedaggio o autostrade dalla rotta OSRM
+- **Prezzo effettivo** — calcolo che penalizza i distributori fuori rotta in base al costo della deviazione
+- **Break-even** — per ogni distributore fuori rotta: quanti litri bisogna fare perché la deviazione convenga
+- **Badge sul percorso** — indicazione visiva se il distributore è sul percorso, fuori rotta (+X km), o la stazione più economica disponibile
+- **Mappa interattiva Leaflet** — tracciato della rotta + marker numerati per ogni distributore (colori: verde migliore, giallo top-3, viola altri)
+- **Click bidirezionale** — cliccare un marker sulla mappa scrolla alla card; cliccare una card centra il marker sulla mappa
+- **Popup mappa** — ogni marker mostra nome, prezzo, km lungo la rotta e deviazione
+
+### Interfaccia e UX
+
+- **Navigazione a tab** — switch tra "Vicino a te" e "Sul percorso" nell'header
 - **Interfaccia multilingua** — Italiano e Tedesco, selettore nell'header con cookie persistente
-- **Progress bar di caricamento** — feedback dettagliato sui passaggi della ricerca
-- **Cache multi-livello** — ricerche (1h), distanze OSRM (30gg), lista marche (24h)
-- **PWA installabile** — funziona come app su mobile e desktop
-- **Tutorial guidato** — overlay 7 step al primo accesso, tradotto
+- **Progress bar di caricamento** — feedback dettagliato sui passaggi della ricerca (step diversi per SOS, ricerca normale e percorso)
+- **Tutorial guidato** — overlay 7 step al primo accesso, traducibile; richiamabile dal pulsante `?` fisso
+- **Dark theme con glassmorphism** — UI scura con effetti glass, font Inter + JetBrains Mono
+- **PWA installabile** — `manifest.json` + Service Worker (`sw.js`), funziona come app su mobile e desktop
+
+### Dati e performance
+
+- **Cache multi-livello** — ricerche (1h), distanze OSRM (30gg), lista marche (24h), anagrafica MIMIT (24h)
+- **Cache file-based con sharding MD5** — suddivisione in sottocartelle per evitare directory troppo grandi
+- **Chiamate OSRM parallele** — `curl_multi` per calcolare distanze stradali di più distributori in contemporanea
 
 ## Fonti dati
 
@@ -32,6 +67,7 @@ PWA per trovare i distributori di carburante più convenienti vicino a te, con c
 
 - **Backend** — PHP puro, nessun framework, split modulare in `includes/`
 - **Frontend** — HTML/CSS/JS vanilla, dark theme con glassmorphism
+- **Mappa** — Leaflet.js (solo `route.php`)
 - **Font** — Inter + JetBrains Mono
 - **Geocoding** — Nominatim (OpenStreetMap), gratuito e senza API key
 - **Routing** — OSRM demo server (sostituibile con istanza self-hosted per alto traffico)
@@ -43,7 +79,8 @@ PWA per trovare i distributori di carburante più convenienti vicino a te, con c
 
 ```
 fuelfinder/
-├── index.php                        # Entry point, view e layout
+├── index.php                        # Entry point: ricerca distributori vicini
+├── route.php                        # Pianificazione percorso con mappa
 ├── includes/
 │   ├── config.php                   # Costanti pubbliche + caricamento secrets
 │   ├── config.local.php             # Secrets (API key) — gitignorato
@@ -52,12 +89,14 @@ fuelfinder/
 │   ├── api.php                      # Endpoint brands (con cache 24h)
 │   ├── cache.php                    # Cache file-based con TTL e sharding MD5
 │   ├── data.php                     # Orchestrazione ricerca: provider → OSRM → calcoli
+│   ├── route_data.php               # Logica percorso: OSRM route, waypoints, filtraggio corridoio
 │   └── providers/
 │       ├── router.php               # Dispatcher paese + bbox + cross-border
 │       ├── mimit.php                # Provider Italia
 │       └── tankerkoenig.php         # Provider Germania
 ├── js/
-│   ├── app.js                       # Logica frontend (GPS, form, progress, garage, brands)
+│   ├── app.js                       # Logica frontend (GPS, form, progress, garage, brands, autocomplete)
+│   ├── route.js                     # Mappa Leaflet, autocomplete percorso, pin draggabili
 │   └── tutorial.js                  # Tutorial overlay
 ├── style.css
 ├── manifest.json

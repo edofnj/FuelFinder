@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /includes/
+Disallow: /cache/
+Disallow: /data/
+
+Sitemap: https://fuelfinder.fmenegazzi.it/sitemap.xml

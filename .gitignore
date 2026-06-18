@@ -1,7 +1,9 @@
 # Dati scaricati a runtime
 anagrafica.csv
 anagrafica.csv.ser
+anagrafica.csv.json
 prezzi.csv
+*.lock
 
 # Statistiche e sessioni locali
 data/
@@ -11,11 +13,14 @@ cache/
 
 # Sistema
 .DS_Store
+._*
+*.bak
 
 # Claude Code
 .claude/
 
 # Secrets locali
+.env
 includes/config.local.php
 docker-compose.yml
 .user.ini

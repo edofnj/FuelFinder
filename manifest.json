@@ -2,10 +2,10 @@
   "name": "FuelFinder",
   "short_name": "FuelFinder",
   "description": "Trova il carburante più conveniente",
-  "start_url": "index.php",
+  "start_url": "/?guest=1",
   "display": "standalone",
-  "background_color": "#0d0d1a",
-  "theme_color": "#0d0d1a",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
   "orientation": "portrait",
   "icons": [
     {

@@ -35,7 +35,7 @@ function getOsrmRoute($fromLat, $fromLon, $toLat, $toLon): ?array {
     $cacheKey = sprintf('osrm_%.4f,%.4f|%.4f,%.4f',
         round($fromLat, 4), round($fromLon, 4),
         round($toLat,   4), round($toLon,   4));
-    $cached = cacheGet('route', $cacheKey, 1800);
+    $cached = cacheGet('route', $cacheKey, 2592000);
     if ($cached !== null) return $cached;
 
     $url = 'https://router.project-osrm.org/route/v1/driving/'
@@ -48,7 +48,8 @@ function getOsrmRoute($fromLat, $fromLon, $toLat, $toLon): ?array {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 12,
         CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_USERAGENT      => 'FuelFinder/1.0',
     ]);
     $resp = curl_exec($ch);
@@ -80,7 +81,7 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
         round($fromLat, 4), round($fromLon, 4),
         round($toLat,   4), round($toLon,   4),
         $noTolls, $noHighways);
-    $cached = cacheGet('route', $cacheKey, 1800);
+    $cached = cacheGet('route', $cacheKey, 2592000);
     if ($cached !== null) return $cached;
 
     $payload = json_encode([
@@ -95,15 +96,16 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
         ]],
     ]);
 
-    $ch = curl_init('https://valhalla1.openstreetmap.de/route');
+    $ch = curl_init('http://valhalla:8002/route');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $payload,
         CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-        CURLOPT_TIMEOUT        => 20,
-        CURLOPT_CONNECTTIMEOUT => 6,
-        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 12,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_USERAGENT      => 'FuelFinder/1.0',
     ]);
     $resp = curl_exec($ch);
@@ -112,6 +114,7 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
 
     if (!$resp || $code !== 200) return null;
     $data = json_decode($resp, true);
+    if (!is_array($data)) return null;
 
     $shapeStr = $data['trip']['legs'][0]['shape'] ?? '';
     if (!is_string($shapeStr) || $shapeStr === '') return null;
@@ -128,11 +131,9 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
 }
 
 function getRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = []): ?array {
-    if (!empty($exclude)) {
-        $result = getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, $exclude);
-        if ($result !== null) return $result;
-    }
-    return getOsrmRoute($fromLat, $fromLon, $toLat, $toLon);
+    // Valhalla self-hostato gestisce sia il percorso base sia evita pedaggi/autostrade.
+    // (getOsrmRoute resta definita ma non più usata: niente dipendenza dal demo OSRM.)
+    return getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, $exclude);
 }
 
 function sampleRouteWaypoints(array $coords, float $stepKm = 8.0): array {
@@ -273,7 +274,8 @@ function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): 
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $payload,
             CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'User-Agent: FuelFinder/1.0'],
-            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_TIMEOUT        => 10,
         ]);
         $handles[$idx] = $ch;
@@ -303,11 +305,14 @@ function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): 
             curl_close($handles[$idx]);
 
             $wpResult = [];
+            $okResp   = false;
 
             if ($resp && $code === 200) {
                 $data = json_decode($resp, true);
-                if (!empty($data['results'])) {
-                    foreach ($data['results'] as $item) {
+                if (is_array($data)) {
+                    $okResp = true;
+                    foreach (($data['results'] ?? []) as $item) {
+                        if (!is_array($item['fuels'] ?? null) || !is_array($item['location'] ?? null)) continue;
                         $brand = trim($item['brand'] ?? $item['name'] ?? '');
 
                         $prezzo = null; $isSelf = false;
@@ -318,7 +323,7 @@ function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): 
                                 $isSelf = (bool)($fuel['isSelf'] ?? false);
                             }
                         }
-                        if ($prezzo === null) continue;
+                        if ($prezzo === null || $prezzo <= 0) continue;
 
                         $insertDate = $item['insertDate'] ?? '';
                         if ($insertDate) {
@@ -357,10 +362,14 @@ function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): 
                 }
             }
 
-            $wp  = $toFetch[$idx];
-            $key = sprintf('rpt_%.3f_%.3f_%.0f_%s',
-                round($wp['lat'], 3), round($wp['lon'], 3), $radiusKm, $fuelType);
-            cacheSet($namespace, $key, $wpResult);
+            // Cache solo su risposta valida: un errore upstream non deve
+            // avvelenare la cache con risultati vuoti per tutto il TTL.
+            if ($okResp) {
+                $wp  = $toFetch[$idx];
+                $key = sprintf('rpt_%.3f_%.3f_%.0f_%s',
+                    round($wp['lat'], 3), round($wp['lon'], 3), $radiusKm, $fuelType);
+                cacheSet($namespace, $key, $wpResult);
+            }
         }
 
         $pos = $windowEnd;
@@ -405,7 +414,8 @@ function routeSearchTK(array $waypoints, float $radiusKm, string $fuelType): arr
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
-            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_USERAGENT      => 'FuelFinder/1.0',
         ]);
         $resp = curl_exec($ch);
@@ -413,11 +423,13 @@ function routeSearchTK(array $waypoints, float $radiusKm, string $fuelType): arr
         curl_close($ch);
 
         $wpResult = [];
+        $okResp   = false;
 
         if ($resp && $code === 200) {
             $data = json_decode($resp, true);
-            if (!empty($data['ok']) && !empty($data['stations'])) {
-                foreach ($data['stations'] as $st) {
+            if (is_array($data) && !empty($data['ok'])) {
+                $okResp = true;
+                foreach (($data['stations'] ?? []) as $st) {
                     $price = isset($st['price']) ? (float)$st['price'] : 0;
                     if ($price <= 0) continue;
 
@@ -447,7 +459,7 @@ function routeSearchTK(array $waypoints, float $radiusKm, string $fuelType): arr
             }
         }
 
-        cacheSet($namespace, $key, $wpResult);
+        if ($okResp) cacheSet($namespace, $key, $wpResult);
     }
 
     return array_values($all);

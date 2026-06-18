@@ -20,18 +20,19 @@ function mimitSearch($lat, $lon, $radiusKm, $fuelType) {
     $out        = [];
 
     foreach ($data['results'] as $item) {
+        if (!is_array($item['fuels'] ?? null) || !is_array($item['location'] ?? null)) continue;
         $brand = trim($item['brand'] ?? $item['name'] ?? '');
 
         // Prezzo per fuelId richiesto, preferisce self
         $prezzo = null; $isSelf = false;
         foreach ($item['fuels'] as $fuel) {
             if ((int)($fuel['fuelId'] ?? 0) !== $fuelIdInt) continue;
-            if ($prezzo === null || ($fuel['isSelf'] && !$isSelf)) {
-                $prezzo = (float)$fuel['price'];
-                $isSelf = (bool)$fuel['isSelf'];
+            if ($prezzo === null || (!empty($fuel['isSelf']) && !$isSelf)) {
+                $prezzo = (float)($fuel['price'] ?? 0);
+                $isSelf = (bool)($fuel['isSelf'] ?? false);
             }
         }
-        if ($prezzo === null) continue;
+        if ($prezzo === null || $prezzo <= 0) continue;
 
         // Scarta prezzi > 3 giorni
         $insertDate = $item['insertDate'] ?? '';

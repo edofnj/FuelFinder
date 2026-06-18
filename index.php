@@ -1,30 +1,75 @@
 <?php
 require 'includes/config.php';
 require 'includes/i18n.php';
+
+// "/" è l'unica home: l'app si vede solo da loggati o "ospiti" (cookie ff_guest,
+// impostato dal bottone "Prova senza account"); gli altri vedono la landing.
+if (isset($_GET['guest'])) {
+    setcookie('ff_guest', '1', ['expires' => time() + 86400 * 365, 'path' => '/', 'secure' => requestIsHttps(), 'samesite' => 'Lax']);
+    header('Location: /'); exit;
+}
+if (!isLoggedIn() && empty($_COOKIE['ff_guest']) && $_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['verified'])) {
+    require __DIR__ . '/landing.php';
+    exit;
+}
+
 require 'includes/api.php';
 require 'includes/data.php';
+if ($_SERVER['REQUEST_METHOD'] === 'GET') track('pageview');
 ?>
 <!DOCTYPE html>
 <html lang="<?= currentLang() ?>">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>FuelFinder</title>
+<?php
+  $seoLang  = function_exists('currentLang') ? currentLang() : 'it';
+  $seoCanon = 'https://fuelfinder.fmenegazzi.it/' . ($seoLang === 'de' ? '?lang=de' : '');
+  if ($seoLang === 'de') {
+      $seoTitle = 'FuelFinder — Günstigste Tankstellen in deiner Nähe';
+      $seoDesc  = 'Finde die günstigsten Tankstellen in deiner Nähe oder entlang deiner Route. Aktuelle Spritpreise für Benzin, Diesel, LPG und Erdgas.';
+  } else {
+      $seoTitle = 'FuelFinder — Distributori di carburante più economici (dati MIMIT)';
+      $seoDesc  = 'Trova i distributori di carburante più economici vicino a te o lungo il tuo percorso. Prezzi dai dati ufficiali MIMIT: benzina, diesel, GPL e metano.';
+  }
+?>
+<title><?= htmlspecialchars($seoTitle) ?></title>
+<meta name="description" content="<?= htmlspecialchars($seoDesc) ?>">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="<?= htmlspecialchars($seoCanon) ?>">
+<link rel="alternate" hreflang="it" href="https://fuelfinder.fmenegazzi.it/">
+<link rel="alternate" hreflang="de" href="https://fuelfinder.fmenegazzi.it/?lang=de">
+<link rel="alternate" hreflang="x-default" href="https://fuelfinder.fmenegazzi.it/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FuelFinder">
+<meta property="og:title" content="<?= htmlspecialchars($seoTitle) ?>">
+<meta property="og:description" content="<?= htmlspecialchars($seoDesc) ?>">
+<meta property="og:url" content="<?= htmlspecialchars($seoCanon) ?>">
+<meta property="og:image" content="https://fuelfinder.fmenegazzi.it/img/apple-touch-icon.png">
+<meta property="og:locale" content="<?= $seoLang === 'de' ? 'de_DE' : 'it_IT' ?>">
+<meta name="twitter:card" content="summary">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d0d1a">
+<meta name="theme-color" content="#0b1220">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<?php if (isset($_GET['verified'])): $vok = ($_GET['verified'] === '1'); ?>
+<div id="ffVerifyToast" style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:1200;padding:12px 20px;border-radius:10px;font-size:.9rem;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.5);transition:opacity .6s;<?= $vok ? 'background:#16331f;color:#7ee787;border:1px solid #10b981' : 'background:#331a1a;color:#f0a0a0;border:1px solid #da3633' ?>">
+<?= $vok
+    ? (currentLang()==='de' ? '✓ E-Mail bestätigt! Du kannst dich jetzt anmelden.' : '✓ Email verificata! Ora puoi accedere.')
+    : (currentLang()==='de' ? 'Bestätigungslink ungültig oder abgelaufen.' : 'Link di verifica non valido o scaduto.') ?>
+</div>
+<script>setTimeout(function(){var t=document.getElementById('ffVerifyToast');if(t){t.style.opacity='0';setTimeout(function(){t.remove();},700);}},6000);</script>
+<?php endif; ?>
 
 <div class="loading-overlay" id="loadingOverlay" aria-hidden="true" hidden>
     <div class="loading-box">
@@ -43,11 +88,12 @@ require 'includes/data.php';
             <a href="?lang=it" class="lang-opt<?= currentLang()==='it'?' active':'' ?>">IT</a>
             <a href="?lang=de" class="lang-opt<?= currentLang()==='de'?' active':'' ?>">DE</a>
         </div>
+        <?php include __DIR__ . '/includes/header_account.php'; ?>
     </header>
 
     <nav class="page-nav">
-        <a href="index.php" class="nav-tab active"><?= t('nav_nearby') ?></a>
-        <a href="route.php" class="nav-tab"><?= t('nav_route') ?></a>
+        <a href="/" class="nav-tab active"><?= t('nav_nearby') ?></a>
+        <a href="/route" class="nav-tab"><?= t('nav_route') ?></a>
     </nav>
 
     <div class="layout">
@@ -61,6 +107,7 @@ require 'includes/data.php';
                 <input type="hidden" name="consumo" id="sosConsumo">
                 <input type="hidden" name="quantita" id="sosQuantita">
                 <input type="hidden" name="modo" id="sosModo">
+                <input type="hidden" name="tipo" id="sosTipo">
                 <input type="hidden" name="addr_label" id="sosAddrLabel">
                 <button type="submit" class="sos-btn" id="sosBtn" disabled><?= t('sos_btn') ?></button>
             </form>
@@ -162,7 +209,7 @@ require 'includes/data.php';
                     <input type="hidden" name="lon" class="lon-hidden">
 
                     <button type="submit" name="calc" class="calc-btn" id="calcBtn" disabled><?= t('calc_btn') ?></button>
-                    <div id="gps-status" style="color:#e3b341;"><?= t('gps_wait') ?></div>
+                    <div id="gps-status" style="color:#10b981;"><?= t('gps_wait') ?></div>
 
                     <input type="hidden" name="addr_label" id="addrLabelInput">
 
@@ -305,7 +352,10 @@ const FF_SAVED_LON    = <?= isset($_POST['lon']) ? (float)$_POST['lon'] : 0 ?>;
 const FF_ADDR_LABEL   = <?= json_encode($_POST['addr_label'] ?? '') ?>;
 const FF_LANG         = <?= json_encode(currentLang()) ?>;
 window.FF_T = <?= json_encode($LANG[currentLang()], JSON_UNESCAPED_UNICODE) ?>;
+window.FF_USER = <?= json_encode(currentUser() ? ['email' => currentUser()['email'], 'isAdmin' => (bool)currentUser()['is_admin']] : null) ?>;
+window.FF_CSRF = <?= json_encode(csrfToken()) ?>;
 </script>
+<?php include __DIR__ . '/includes/cookie_banner.php'; ?>
 <script src="js/tutorial.js"></script>
 <script src="js/app.js"></script>
 </body>

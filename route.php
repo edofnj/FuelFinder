@@ -5,6 +5,8 @@ require 'includes/cache.php';
 require 'includes/api.php';
 require 'includes/route_data.php';
 
+if ($_SERVER['REQUEST_METHOD'] === 'GET') track('pageview');
+
 // Restore form values after POST
 $valTipo           = $_POST['tipo']           ?? 'benzina';
 $valConsumo        = $_POST['consumo']        ?? '';
@@ -108,6 +110,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
                 usort($processed, fn($a, $b) => $a['effective_price'] <=> $b['effective_price']);
                 $routeStations = $processed;
                 $hasResults    = true;
+                track('route', [
+                    'country' => routeDetectCountry($fromLat, $fromLon),
+                    'fuel'    => $fuelType,
+                    'radius'  => (int)$corridorKm,
+                    'results' => count($processed),
+                    'meta'    => ['distance_km' => $routeResult['distance_km'] ?? null, 'avoid_motorway' => $valAvoidMotorway, 'avoid_toll' => $valAvoidToll],
+                ]);
             }
         }
     }
@@ -118,20 +127,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>FuelFinder — <?= t('nav_route') ?></title>
+<?php
+  $seoLang  = function_exists('currentLang') ? currentLang() : 'it';
+  $seoCanon = 'https://fuelfinder.fmenegazzi.it/route' . ($seoLang === 'de' ? '?lang=de' : '');
+  if ($seoLang === 'de') {
+      $seoTitle = 'FuelFinder — Günstigste Tankstellen entlang deiner Route';
+      $seoDesc  = 'Plane deine Fahrt und finde die günstigsten Tankstellen entlang deiner Route. Offizielle Preise für Benzin, Diesel, LPG und Erdgas.';
+  } else {
+      $seoTitle = 'FuelFinder — Distributori più economici lungo il percorso';
+      $seoDesc  = 'Pianifica il viaggio e trova i distributori di carburante più convenienti lungo il tuo percorso. Prezzi ufficiali MIMIT: benzina, diesel, GPL e metano.';
+  }
+?>
+<title><?= htmlspecialchars($seoTitle) ?></title>
+<meta name="description" content="<?= htmlspecialchars($seoDesc) ?>">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="<?= htmlspecialchars($seoCanon) ?>">
+<link rel="alternate" hreflang="it" href="https://fuelfinder.fmenegazzi.it/route">
+<link rel="alternate" hreflang="de" href="https://fuelfinder.fmenegazzi.it/route?lang=de">
+<link rel="alternate" hreflang="x-default" href="https://fuelfinder.fmenegazzi.it/route">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FuelFinder">
+<meta property="og:title" content="<?= htmlspecialchars($seoTitle) ?>">
+<meta property="og:description" content="<?= htmlspecialchars($seoDesc) ?>">
+<meta property="og:url" content="<?= htmlspecialchars($seoCanon) ?>">
+<meta property="og:image" content="https://fuelfinder.fmenegazzi.it/img/apple-touch-icon.png">
+<meta property="og:locale" content="<?= $seoLang === 'de' ? 'de_DE' : 'it_IT' ?>">
+<meta name="twitter:card" content="summary">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d0d1a">
+<meta name="theme-color" content="#0b1220">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/libs/leaflet/leaflet.css">
 </head>
 <body>
 
@@ -152,11 +185,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
             <a href="?lang=it" class="lang-opt<?= currentLang()==='it'?' active':'' ?>">IT</a>
             <a href="?lang=de" class="lang-opt<?= currentLang()==='de'?' active':'' ?>">DE</a>
         </div>
+        <?php include __DIR__ . '/includes/header_account.php'; ?>
     </header>
 
     <nav class="page-nav">
-        <a href="index.php" class="nav-tab"><?= t('nav_nearby') ?></a>
-        <a href="route.php" class="nav-tab active"><?= t('nav_route') ?></a>
+        <a href="/" class="nav-tab"><?= t('nav_nearby') ?></a>
+        <a href="/route" class="nav-tab active"><?= t('nav_route') ?></a>
     </nav>
 
     <div class="layout route-layout">
@@ -178,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
                         <div class="addr-suggestions-wrap" id="fromSuggestions"></div>
                     </div>
                     <button type="button" id="gpsFromBtn" class="btn-ghost btn-cyan"
-                            style="display:none;margin-top:6px;width:100%;justify-content:center">
+                            style="display:flex;margin-top:6px;width:100%;justify-content:center">
                         <?= t('route_gps_use') ?>
                     </button>
                 </div>
@@ -196,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
                         <div class="addr-suggestions-wrap" id="toSuggestions"></div>
                     </div>
                     <button type="button" id="gpsToBtn" class="btn-ghost btn-cyan"
-                            style="display:none;margin-top:6px;width:100%;justify-content:center">
+                            style="display:flex;margin-top:6px;width:100%;justify-content:center">
                         <?= t('route_gps_use_to') ?>
                     </button>
                 </div>
@@ -372,14 +406,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
 
 <script>
 const ROUTE_COORDS   = <?= $routeResult ? json_encode($routeResult['coords']) : 'null' ?>;
-const ROUTE_STATIONS = <?= $hasResults ? json_encode(array_map(fn($s,$i)=>['idx'=>$i,'lat'=>$s['lat'],'lon'=>$s['lon'],'nome'=>$s['name'].' ('.$s['brand'].')','price'=>$s['price'],'km_along'=>$s['km_along'],'detour_km'=>$s['detour_km'],'break_even'=>$s['break_even']],$routeStations,array_keys($routeStations))) : '[]' ?>;
+const ROUTE_STATIONS = <?= $hasResults ? json_encode(array_map(fn($s,$i)=>['idx'=>$i,'lat'=>$s['lat'],'lon'=>$s['lon'],'nome'=>$s['name'].' ('.$s['brand'].')','price'=>$s['price'],'km_along'=>$s['km_along'],'detour_km'=>$s['detour_km'],'break_even'=>$s['break_even']],$routeStations,array_keys($routeStations)), JSON_HEX_TAG) : '[]' ?>;
 const ROUTE_FROM     = {lat:<?=(float)($valFromLat?:0)?>,lon:<?=(float)($valFromLon?:0)?>,label:<?=json_encode($valFromLabel, JSON_HEX_TAG)?>};
 const ROUTE_TO       = {lat:<?=(float)($valToLat?:0)?>,lon:<?=(float)($valToLon?:0)?>,label:<?=json_encode($valToLabel, JSON_HEX_TAG)?>};
 const HAS_RESULTS    = <?= $hasResults ? 'true' : 'false' ?>;
 const FF_LANG        = <?= json_encode(currentLang()) ?>;
 window.FF_T          = <?= json_encode($LANG[currentLang()], JSON_UNESCAPED_UNICODE) ?>;
+window.FF_USER       = <?= json_encode(currentUser() ? ['email' => currentUser()['email'], 'isAdmin' => (bool)currentUser()['is_admin']] : null) ?>;
+window.FF_CSRF       = <?= json_encode(csrfToken()) ?>;
 </script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<?php include __DIR__ . '/includes/cookie_banner.php'; ?>
+<script src="/libs/leaflet/leaflet.js"></script>
 <script src="js/route.js"></script>
 </body>
 </html>

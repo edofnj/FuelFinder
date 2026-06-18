@@ -26,13 +26,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 qi2.style.borderColor = 'var(--red)';
                 qi2.focus();
             }
-            ['consumo','quantita'].forEach(function(n){
-                var el = document.querySelector('input[name="'+n+'"]');
-                if(el) el.addEventListener('input', function(){ this.style.borderColor=''; }, {once:true});
-            });
             return;
         }
         showLoadingOverlay(false);
+    });
+
+    // Reset del bordo rosso: registrato una sola volta (non a ogni submit fallito)
+    ['consumo','quantita'].forEach(function(n){
+        var el = document.querySelector('input[name="'+n+'"]');
+        if(el) el.addEventListener('input', function(){ this.style.borderColor=''; });
     });
 
     // SOS — copia valori da mainForm prima del submit
@@ -40,6 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('sosConsumo').value    = document.querySelector('#mainForm input[name="consumo"]').value;
         document.getElementById('sosQuantita').value   = document.querySelector('#mainForm input[name="quantita"]').value;
         document.getElementById('sosModo').value       = document.querySelector('#mainForm select[name="modo"]').value;
+        document.getElementById('sosTipo').value       = document.querySelector('#mainForm select[name="tipo"]').value;
         document.getElementById('sosAddrLabel').value  = document.getElementById('addrLabelInput').value;
         showLoadingOverlay(true);
     });
@@ -203,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if ('geolocation' in navigator) {
         if (!FF_ADDR_LABEL) {
             st.innerText = T2.gps_searching || '📍 GPS…';
-            st.style.color = '#e3b341';
+            st.style.color = '#10b981';
         }
         navigator.geolocation.getCurrentPosition(
             function(p) {
@@ -260,28 +263,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (q.length < 4 || !addrHasCivico(q)) return;
 
         addrTimer = setTimeout(function() {
-            var base = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=it,de&addressdetails=1';
-            var hdrs = { 'Accept-Language': 'it', 'User-Agent': 'FuelFinder/1.0' };
-            var fetchList = [
-                fetch(base + '&layer=address&q=' + encodeURIComponent(q), { headers: hdrs })
-                    .then(function(r) { return r.json(); }).catch(function() { return []; })
-            ];
-            var numM = q.match(/^([^0-9,]+?)\s+(\d+[a-zA-Z]?)\s*(?:,\s*(.+))?$/);
-            if (numM) {
-                var sStreet = numM[1].trim();
-                var sNum    = numM[2];
-                var sCity   = (numM[3] || '').trim();
-                var structUrl = base + '&housenumber=' + encodeURIComponent(sNum)
-                              + '&street=' + encodeURIComponent(sStreet)
-                              + (sCity ? '&city=' + encodeURIComponent(sCity) : '');
-                fetchList.push(
-                    fetch(structUrl, { headers: hdrs })
-                        .then(function(r) { return r.json(); }).catch(function() { return []; })
-                );
-            }
-            Promise.all(fetchList).then(function(results) {
-                var allItems = [];
-                results.forEach(function(r) { if (Array.isArray(r)) allItems = allItems.concat(r); });
+            fetch('/geocode.php?q=' + encodeURIComponent(q))
+                .then(function(r) { return r.json(); })
+                .catch(function() { return []; })
+                .then(function(allItems) {
+                if (!Array.isArray(allItems)) allItems = [];
                 allItems.sort(function(a, b) {
                     return ((b.address && b.address.house_number) ? 1 : 0)
                          - ((a.address && a.address.house_number) ? 1 : 0);
@@ -359,29 +345,38 @@ document.addEventListener('DOMContentLoaded', function() {
         if (anchor) anchor.scrollIntoView({behavior:'smooth'});
     }
 
-    // GARAGE
-    var GKEY = 'fuelfinder_garage', AKEY = 'fuelfinder_active';
+    // GARAGE — server-side quando loggato (API /garage.php), gate login se anonimo.
+    var AKEY = 'fuelfinder_active', GKEY_LEGACY = 'fuelfinder_garage';
+    var FF_LOGGED = !!(window.FF_USER);
+    var GARAGE = []; // stato in memoria (sorgente: server se loggato)
     function lsGet(k)   { try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;} }
     function lsSet(k,v) { try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
     function lsDel(k)   { try{localStorage.removeItem(k);}catch(e){} }
-    function loadG()    { return lsGet(GKEY)||[]; }
-    function saveG(l)   { lsSet(GKEY,l); }
+    function gApi(action, params){
+        var fd=new FormData(); fd.append('action',action); fd.append('csrf', window.FF_CSRF||'');
+        Object.keys(params||{}).forEach(function(k){fd.append(k,params[k]);});
+        return fetch('/garage.php',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();});
+    }
+    function requireLogin(){
+        if(typeof window.ffOpenAuth==='function') window.ffOpenAuth('register');
+        else window.location.href='/account?next='+encodeURIComponent(location.pathname);
+    }
 
     var FL={benzina:'Benzina',gasolio:'Gasolio',gpl:'GPL',metano:'Metano'};
     function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
     function renderGarage() {
-        var list=loadG(), activeId=String(lsGet(AKEY)||'');
+        var activeId=String(lsGet(AKEY)||'');
         var container=document.getElementById('vehicleList');
         var empty=document.getElementById('garageEmpty');
         var count=document.getElementById('garageCount');
         if(!container) return;
-        count.textContent=list.length;
-        empty.style.display=list.length===0?'block':'none';
+        count.textContent=GARAGE.length;
+        empty.style.display=GARAGE.length===0?'block':'none';
         container.querySelectorAll('.vehicle-item').forEach(function(el){el.remove();});
-        list.forEach(function(v){
+        GARAGE.forEach(function(v){
             var item=document.createElement('div');
-            item.className='vehicle-item'+(v.id===activeId?' active':'');
+            item.className='vehicle-item'+(String(v.id)===activeId?' active':'');
             item.innerHTML=
                 '<span class="vehicle-icon">'+(FL[v.tipo]||v.tipo).substring(0,1)+'</span>'+
                 '<div class="vehicle-info">'+
@@ -397,9 +392,11 @@ document.addEventListener('DOMContentLoaded', function() {
             item.querySelector('.vehicle-del:not(.vehicle-edit)').addEventListener('click',function(e){
                 e.stopPropagation();
                 var vid=this.dataset.vid;
-                saveG(loadG().filter(function(x){return x.id!==vid;}));
-                if(String(lsGet(AKEY))===vid) lsDel(AKEY);
-                renderGarage();
+                gApi('delete',{id:vid}).then(function(){
+                    GARAGE=GARAGE.filter(function(x){return String(x.id)!==String(vid);});
+                    if(String(lsGet(AKEY))===String(vid)) lsDel(AKEY);
+                    renderGarage();
+                });
             });
             item.addEventListener('click',function(){selectVehicle(v.id);});
             container.appendChild(item);
@@ -407,9 +404,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function selectVehicle(id) {
-        var v=loadG().find(function(x){return x.id===String(id);});
+        var v=GARAGE.find(function(x){return String(x.id)===String(id);});
         if(!v) return;
-        lsSet(AKEY,v.id);
+        lsSet(AKEY,String(v.id));
         var ts=document.querySelector('#mainForm select[name="tipo"]');
         var ci=document.querySelector('#mainForm input[name="consumo"]');
         if(ts) ts.value=v.tipo;
@@ -418,6 +415,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     window.saveVehicle=function(){
+        if(!FF_LOGGED){ requireLogin(); return; }
         var ni=document.getElementById('vNome');
         var ci2=document.getElementById('vConsumo');
         var nome=ni.value.trim();
@@ -428,26 +426,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if(!nome){ni.style.borderColor='var(--red)';ni.focus();return;}
         if(!consumo||consumo<=0){ci2.style.borderColor='var(--red)';ci2.focus();return;}
         if(editId) {
-            // Modifica veicolo esistente
-            var l=loadG().map(function(x){
-                return x.id===editId ? {id:x.id,nome:nome,tipo:tipo,consumo:consumo} : x;
+            // Modifica veicolo esistente (server)
+            gApi('update',{id:editId,nome:nome,tipo:tipo,consumo:consumo}).then(function(d){
+                if(!d.ok) return;
+                GARAGE=GARAGE.map(function(x){return String(x.id)===String(editId)?{id:x.id,nome:nome,tipo:tipo,consumo:consumo}:x;});
+                window.closeAddForm(); renderGarage(); selectVehicle(editId);
             });
-            saveG(l);
-            window.closeAddForm();
-            renderGarage();
-            selectVehicle(editId);
         } else {
-            // Nuovo veicolo
-            var nv={id:String(Date.now()),nome:nome,tipo:tipo,consumo:consumo};
-            var l=loadG(); l.push(nv); saveG(l);
-            window.closeAddForm();
-            renderGarage();
-            selectVehicle(nv.id);
+            // Nuovo veicolo (server)
+            gApi('add',{nome:nome,tipo:tipo,consumo:consumo}).then(function(d){
+                if(!d.ok||!d.vehicle) return;
+                GARAGE.push(d.vehicle);
+                window.closeAddForm(); renderGarage(); selectVehicle(d.vehicle.id);
+            });
         }
     };
 
     function openEditForm(id) {
-        var v=loadG().find(function(x){return x.id===String(id);});
+        var v=GARAGE.find(function(x){return String(x.id)===String(id);});
         if(!v) return;
         document.getElementById('vEditId').value=v.id;
         document.getElementById('vNome').value=v.nome;
@@ -463,6 +459,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     window.openAddForm=function(){
+        if(!FF_LOGGED){ requireLogin(); return; }
         document.getElementById('vEditId').value='';
         document.getElementById('vFormLabel').textContent='Nome veicolo';
         document.getElementById('vSaveBtn').textContent='✓ Salva';
@@ -488,21 +485,42 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('garageChevron').classList.toggle('open');
     };
 
-    renderGarage();
-    var initList=loadG();
-    if(initList.length>0){
-        document.getElementById('garageBody').classList.add('open');
-        document.getElementById('garageChevron').classList.add('open');
-        var av=lsGet(AKEY);
-        if(av){
-            var vv=initList.find(function(x){return x.id===String(av);});
-            if(vv){
-                var ts2=document.querySelector('#mainForm select[name="tipo"]');
-                var ci3=document.querySelector('#mainForm input[name="consumo"]');
-                if(ts2) ts2.value=vv.tipo;
-                if(ci3) ci3.value=vv.consumo;
+    function initGarageUI(){
+        renderGarage();
+        if(GARAGE.length>0){
+            document.getElementById('garageBody').classList.add('open');
+            document.getElementById('garageChevron').classList.add('open');
+            var av=lsGet(AKEY);
+            if(av){
+                var vv=GARAGE.find(function(x){return String(x.id)===String(av);});
+                if(vv){
+                    var ts2=document.querySelector('#mainForm select[name="tipo"]');
+                    var ci3=document.querySelector('#mainForm input[name="consumo"]');
+                    if(ts2) ts2.value=vv.tipo;
+                    if(ci3) ci3.value=vv.consumo;
+                }
             }
         }
+    }
+
+    if(FF_LOGGED){
+        gApi('list',{}).then(function(d){
+            GARAGE=(d&&d.ok&&d.vehicles)?d.vehicles:[];
+            // migrazione una tantum dei veicoli salvati localmente prima degli account
+            var legacy=lsGet(GKEY_LEGACY);
+            if(GARAGE.length===0 && legacy && legacy.length){
+                var chain=Promise.resolve();
+                legacy.forEach(function(v){
+                    chain=chain.then(function(){return gApi('add',{nome:v.nome,tipo:v.tipo,consumo:v.consumo}).then(function(r){if(r.ok&&r.vehicle)GARAGE.push(r.vehicle);});});
+                });
+                chain.then(function(){lsDel(GKEY_LEGACY);initGarageUI();});
+            } else {
+                initGarageUI();
+            }
+        }).catch(function(){ initGarageUI(); });
+    } else {
+        GARAGE=[];
+        initGarageUI();
     }
 
 

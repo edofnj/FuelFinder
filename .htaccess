@@ -6,12 +6,30 @@ DirectoryIndex index.php
 </FilesMatch>
 
 # Blocca estensioni sensibili ovunque
-<FilesMatch "\.(bak|log|sql|ser|ini|conf|old|swp|tmp|md)$">
+<FilesMatch "\.(bak|log|sql|ser|ini|conf|old|swp|tmp|md|lock|download)$">
     Require all denied
 </FilesMatch>
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # "/" è l'unica home: index e landing (con o senza .php) reindirizzano a /.
+    RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)$
+    RewriteCond %{THE_REQUEST} \s/+(index|landing)(\.php)?[?\s]
+    RewriteRule ^(index|landing)(\.php)?$ https://%{HTTP_HOST}/ [R=301,L]
+
+    # URL puliti — redirect 301 dei vecchi .php verso /pagina.
+    # Solo GET/HEAD (un 301 su POST romperebbe login e ricerche) e solo
+    # sulla richiesta originale del client (THE_REQUEST), mai sui rewrite interni.
+    RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)$
+    RewriteCond %{THE_REQUEST} \s/+(route|account|profile|stats|privacy|tos)\.php[?\s]
+    RewriteRule ^(route|account|profile|stats|privacy|tos)\.php$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+    # /pagina → pagina.php (rewrite interno, solo se il file esiste in root)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{DOCUMENT_ROOT}/$1.php -f
+    RewriteRule ^([a-z]+)$ $1.php [L]
 
     # Blocca cartelle sensibili
     RewriteRule ^includes/ - [F,L]
@@ -26,9 +44,12 @@ DirectoryIndex index.php
     # Blocca CSV
     RewriteRule \.csv$ - [F,L]
 
-    # Blocca tutti i PHP tranne index.php
+    # Blocca tutti i PHP tranne entrypoint pubblici.
+    # La seconda condizione esclude gli URL puliti riscritti sopra
+    # (REQUEST_URI resta /pagina, senza .php).
     RewriteCond %{REQUEST_FILENAME} \.php$
-    RewriteCond %{REQUEST_URI} !/index\.php$
+    RewriteCond %{REQUEST_URI} \.php
+    RewriteCond %{REQUEST_URI} !/(index|route|account|profile|garage|stats|track|privacy|geocode|tiles|tos|landing)\.php$
     RewriteRule .* - [F,L]
 </IfModule>
 
@@ -38,6 +59,7 @@ DirectoryIndex index.php
     Header set X-Frame-Options "SAMEORIGIN"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     Header set Permissions-Policy "geolocation=(self), camera=(), microphone=()"
+    Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
     Header always unset X-Powered-By
     Header unset X-Powered-By
 </IfModule>

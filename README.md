@@ -9,7 +9,6 @@ PWA per trovare i distributori di carburante più convenienti vicino a te, con c
 - **Ricerca per posizione** — GPS automatico o ricerca per indirizzo con autocomplete (Nominatim/OpenStreetMap, IT e DE)
 - **Multi-paese** — provider Italia (MIMIT) e Germania (Tankerkoenig/MTS-K), rilevamento automatico + cross-border
 - **Filtro per tipo carburante** — benzina, diesel, GPL, metano; opzioni IT-only (GPL/metano) nascoste automaticamente in Germania
-- **Filtro per marca** — seleziona solo i brand preferiti (selezione ricordata in localStorage)
 - **Raggio ricerca** — 5 / 10 / 20 km configurabile
 - **Distanze stradali reali** — calcolo via OSRM `/route` in parallelo (non linea d'aria), con cache 30 giorni
 - **Calcolo costo totale** — prezzo carburante + costo del viaggio andata/ritorno in base ai consumi
@@ -49,7 +48,7 @@ PWA per trovare i distributori di carburante più convenienti vicino a te, con c
 
 ### Dati e performance
 
-- **Cache multi-livello** — ricerche (1h), distanze OSRM (30gg), lista marche (24h), anagrafica MIMIT (24h)
+- **Cache multi-livello** — ricerche (1h), distanze OSRM (30gg), anagrafica MIMIT (24h)
 - **Cache file-based con sharding MD5** — suddivisione in sottocartelle per evitare directory troppo grandi
 - **Chiamate OSRM parallele** — `curl_multi` per calcolare distanze stradali di più distributori in contemporanea
 
@@ -72,7 +71,7 @@ PWA per trovare i distributori di carburante più convenienti vicino a te, con c
 - **Geocoding** — Nominatim (OpenStreetMap), gratuito e senza API key
 - **Routing** — OSRM demo server (sostituibile con istanza self-hosted per alto traffico)
 - **PWA** — `manifest.json` + Service Worker (`sw.js`)
-- **Storage** — localStorage per veicoli/preferenze, file cache server-side per OSRM/ricerche/marche
+- **Storage** — localStorage per veicoli/preferenze, file cache server-side per OSRM/ricerche
 - **i18n** — array PHP `$LANG` (IT/DE) + `window.FF_T` per stringhe JS
 
 ## Struttura
@@ -86,7 +85,7 @@ fuelfinder/
 │   ├── config.local.php             # Secrets (API key) — gitignorato
 │   ├── config.local.example.php     # Template da copiare
 │   ├── i18n.php                     # Dizionari IT/DE + helper t()
-│   ├── api.php                      # Endpoint brands (con cache 24h)
+│   ├── api.php                      # Endpoint API
 │   ├── cache.php                    # Cache file-based con TTL e sharding MD5
 │   ├── data.php                     # Orchestrazione ricerca: provider → OSRM → calcoli
 │   ├── route_data.php               # Logica percorso: OSRM route, waypoints, filtraggio corridoio
@@ -95,7 +94,7 @@ fuelfinder/
 │       ├── mimit.php                # Provider Italia
 │       └── tankerkoenig.php         # Provider Germania
 ├── js/
-│   ├── app.js                       # Logica frontend (GPS, form, progress, garage, brands, autocomplete)
+│   ├── app.js                       # Logica frontend (GPS, form, progress, garage, autocomplete)
 │   ├── route.js                     # Mappa Leaflet, autocomplete percorso, pin draggabili
 │   └── tutorial.js                  # Tutorial overlay
 ├── style.css

@@ -1,34 +1,65 @@
 <?php
-// Scarica il CSV anagrafica se mancante o più vecchio di 24h
+// Scarica il CSV anagrafica se mancante o più vecchio di 24h.
+// - Lock non bloccante: un solo processo scarica (no thundering herd).
+// - Download su file temporaneo + rename atomico: nessun lettore vede un CSV
+//   scaricato a metà, e un download fallito NON corrompe più l'anagrafica
+//   esistente (il vecchio comportamento apriva il file reale in 'wb',
+//   troncandolo subito anche quando il download falliva).
 function aggiornaAnagrafica() {
     if (file_exists(FILE_ANAGRAFICA) && (time() - filemtime(FILE_ANAGRAFICA) < 86400)) return;
+
+    $lock = @fopen(FILE_ANAGRAFICA . '.lock', 'c');
+    if (!$lock) return;
+    if (!flock($lock, LOCK_EX | LOCK_NB)) { fclose($lock); return; } // altro processo sta già scaricando
+
+    // Ricontrolla dopo il lock: un altro processo potrebbe aver appena finito.
+    if (file_exists(FILE_ANAGRAFICA) && (time() - filemtime(FILE_ANAGRAFICA) < 86400)) {
+        flock($lock, LOCK_UN); fclose($lock); return;
+    }
+
+    $tmp = FILE_ANAGRAFICA . '.download';
+    $fp  = @fopen($tmp, 'wb');
+    if (!$fp) { flock($lock, LOCK_UN); fclose($lock); return; }
+
     $ch = curl_init(URL_ANAGRAFICA);
-    $fp = fopen(FILE_ANAGRAFICA, 'wb');
     curl_setopt_array($ch, [
         CURLOPT_FILE           => $fp,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_TIMEOUT        => 60,
         CURLOPT_USERAGENT      => 'FuelFinder/1.0',
     ]);
-    curl_exec($ch);
+    $ok   = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     fclose($fp);
+
+    // Solo se download valido e file non vuoto: rename atomico sopra l'originale.
+    if ($ok && $code === 200 && @filesize($tmp) > 0) {
+        @rename($tmp, FILE_ANAGRAFICA);
+    } else {
+        @unlink($tmp);
+    }
+
+    flock($lock, LOCK_UN);
+    fclose($lock);
 }
 
 // Carica idImpianto → [nome, addr] dal CSV anagrafica.
-// Usa una cache serializzata per evitare di parsare 23k righe ad ogni richiesta.
+// Cache JSON (non unserialize → no PHP object injection).
+// Scrittura atomica (tmp+rename); se un altro processo sta già rigenerando il
+// JSON (lock non acquisito) si parsa in memoria senza riscrivere (no write herd).
 function caricaAnagrafica() {
-    $cacheFile = FILE_ANAGRAFICA . '.ser';
+    $cacheFile = FILE_ANAGRAFICA . '.json';
+    $legacyCacheFile = FILE_ANAGRAFICA . '.ser';
 
-    // Cache valida: esiste ed è più recente del CSV
     if (file_exists($cacheFile) && file_exists(FILE_ANAGRAFICA)
         && filemtime($cacheFile) >= filemtime(FILE_ANAGRAFICA)) {
-        $map = unserialize(file_get_contents($cacheFile));
+        $map = json_decode(file_get_contents($cacheFile), true);
         if (is_array($map)) return $map;
     }
 
-    // Rigenera cache dal CSV
     $map = [];
     if (!file_exists(FILE_ANAGRAFICA)) return $map;
     $h = fopen(FILE_ANAGRAFICA, 'r');
@@ -36,7 +67,7 @@ function caricaAnagrafica() {
     $riga = 0;
     while (($line = fgets($h)) !== false) {
         $riga++;
-        if ($riga <= 2) continue; // salta "Estrazione del..." e header
+        if ($riga <= 2) continue;
         $d = explode('|', rtrim($line, "\r\n"));
         if (count($d) < 8 || !is_numeric(trim($d[0]))) continue;
         $id  = (int)trim($d[0]);
@@ -46,11 +77,28 @@ function caricaAnagrafica() {
         ];
     }
     fclose($h);
-    file_put_contents($cacheFile, serialize($map));
+
+    // Scrittura atomica del JSON, solo se nessun altro processo sta già scrivendo.
+    $lock = @fopen($cacheFile . '.lock', 'c');
+    if ($lock) {
+        if (flock($lock, LOCK_EX | LOCK_NB)) {
+            $tmp = $cacheFile . '.' . uniqid('', true) . '.tmp';
+            if (@file_put_contents($tmp, json_encode($map)) !== false) {
+                @chmod($tmp, 0640);
+                if (!@rename($tmp, $cacheFile)) @unlink($tmp);
+            }
+            @unlink($legacyCacheFile);
+            flock($lock, LOCK_UN);
+        }
+        fclose($lock);
+    }
+
     return $map;
 }
 
-// Avvia aggiornamento asincrono dell'anagrafica (non blocca la request)
+// Avvia aggiornamento dell'anagrafica (lock non bloccante: non genera herd).
+// In condizioni normali il refresh è gestito dal cron giornaliero
+// (includes/refresh_cli.php); questo resta come safety-net se il cron non gira.
 aggiornaAnagrafica();
 
 

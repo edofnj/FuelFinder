@@ -51,58 +51,50 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
     }
     if (empty($toFetch)) return;
 
-    // Fase 2: chiamate OSRM parallele solo sui miss
-    $mh = curl_multi_init();
-    $handles = [];
+    // Fase 2: UNICA chiamata matrice a Valhalla self-hostato (/sources_to_targets)
+    // sui soli miss. 1 sorgente (utente) -> N destinazioni (distributori).
+    $targets  = [];
+    $idxByPos = []; // posizione nella matrice => indice in $results
     foreach ($toFetch as $i => $key) {
-        $url = 'https://router.project-osrm.org/route/v1/driving/'
-             . $uLon . ',' . $uLat . ';'
-             . $results[$i]['lon'] . ',' . $results[$i]['lat']
-             . '?overview=false&alternatives=false&steps=false';
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 6,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_USERAGENT      => 'FuelFinder/1.0',
-        ]);
-        $handles[$i] = $ch;
+        $idxByPos[] = $i;
+        $targets[]  = ['lat' => $results[$i]['lat'], 'lon' => $results[$i]['lon']];
     }
 
-    $indices = array_keys($handles);
-    $numFetch = count($indices);
-    $pos = 0;
-    while ($pos < $numFetch) {
-        $windowEnd = min($pos + $concurrency, $numFetch);
-        for ($k = $pos; $k < $windowEnd; $k++) curl_multi_add_handle($mh, $handles[$indices[$k]]);
+    $payload = json_encode([
+        'sources' => [['lat' => $uLat, 'lon' => $uLon]],
+        'targets' => $targets,
+        'costing' => 'auto',
+        'units'   => 'kilometers',
+    ]);
+    $ch = curl_init('http://valhalla:8002/sources_to_targets');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_CONNECTTIMEOUT => 4,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 
-        $running = null;
-        do {
-            curl_multi_exec($mh, $running);
-            if ($running) curl_multi_select($mh, 0.02);
-        } while ($running > 0);
-
-        for ($k = $pos; $k < $windowEnd; $k++) {
-            $i = $indices[$k];
-            $resp = curl_multi_getcontent($handles[$i]);
-            $code = curl_getinfo($handles[$i], CURLINFO_HTTP_CODE);
-            curl_multi_remove_handle($mh, $handles[$i]);
-            curl_close($handles[$i]);
-            if ($resp && $code === 200) {
-                $data = json_decode($resp, true);
-                $dm = $data['routes'][0]['distance'] ?? null;
-                if ($dm !== null && $dm > 0) {
-                    $km = round($dm / 1000, 2);
-                    $results[$i]['distanza'] = $km;
-                    $results[$i]['road_ok']  = true;
-                    cacheSet('osrm', $toFetch[$i], $km);
-                }
+    if ($resp && $code === 200) {
+        $data = json_decode($resp, true);
+        $row  = is_array($data) ? ($data['sources_to_targets'][0] ?? []) : [];
+        if (!is_array($row)) $row = [];
+        foreach ($row as $pos => $cell) {
+            if (!isset($idxByPos[$pos])) continue;
+            $i    = $idxByPos[$pos];
+            $dist = $cell['distance'] ?? null; // km (units=kilometers)
+            if ($dist !== null && $dist > 0) {
+                $km = round((float)$dist, 2);
+                $results[$i]['distanza'] = $km;
+                $results[$i]['road_ok']  = true;
+                cacheSet('osrm', $toFetch[$i], $km);
             }
         }
-        $pos = $windowEnd;
     }
-    curl_multi_close($mh);
 }
 
 function searchCacheKey($uLat, $uLon, $raggio, $fuel) {
@@ -125,6 +117,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
     $uConsumo = empty($valConsumo)  ? 7.0  : (float)$valConsumo;
     $uQta     = empty($valQuantita) ? 20.0 : (float)$valQuantita;
     $uRaggio  = (float)$valRaggio;
+
+    // Bounds check — coords devono essere valide; raggio 1..200 km; consumo+qta sensati.
+    if ($uLat < -90 || $uLat > 90 || $uLon < -180 || $uLon > 180
+        || $uRaggio < 1 || $uRaggio > 200
+        || $uConsumo <= 0 || $uConsumo > 50
+        || $uQta <= 0 || $uQta > 200) {
+        http_response_code(400);
+        die('Parametri non validi');
+    }
 
     // Cache search completo (1h TTL): se hit, bypassa tutto (MIMIT + OSRM).
     // Non attivo in SOS (vogliamo sempre distanze fresche).
@@ -195,7 +196,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
             cacheSet('search', $searchKey, $stations);
         }
 
-        $results = array_values(array_filter($results, fn($r) => $r['distanza'] <= $uRaggio));
+        // prezzo > 0 difensivo: evita divisione per zero nel calcolo "litri netti"
+        $results = array_values(array_filter($results, fn($r) => $r['distanza'] <= $uRaggio && $r['prezzo'] > 0));
 
         foreach ($results as &$r) {
             $litri_v = (($r['distanza'] * 2) / 100) * $uConsumo;
@@ -221,4 +223,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
         elseif ($valModo == 'litri') usort($results, fn($a,$b) => $a['valore'] <=> $b['valore']);
         else usort($results, fn($a,$b) => $b['valore'] <=> $a['valore']);
     }
+
+    // Metrica: ricerca eseguita (search o SOS)
+    $ffCC = ($uLat >= 47.2 && $uLon >= 5.8 && $uLon <= 15.1) ? 'DE' : 'IT';
+    track($isSOS ? 'sos' : 'search', [
+        'fuel'    => $valTipo,
+        'radius'  => (int)$uRaggio,
+        'mode'    => $valModo,
+        'country' => $ffCC,
+        'results' => count($results),
+        'meta'    => ['cache_hit' => ($cachedStations !== null)],
+    ]);
 }

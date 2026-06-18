@@ -1,6 +1,6 @@
 <?php
-// i18n: lingua da ?lang=it|de → cookie → Accept-Language → default it.
-// Lingue attive = paesi supportati dai provider.
+// i18n: lingua da ?lang=it|de → cookie → default it.
+// Accept-Language disabilitato: default sempre italiano, switch manuale via ?lang=.
 
 function i18nDetect() {
     $supported = ['it', 'de'];
@@ -11,8 +11,6 @@ function i18nDetect() {
     if (isset($_COOKIE['ff_lang']) && in_array($_COOKIE['ff_lang'], $supported, true)) {
         return $_COOKIE['ff_lang'];
     }
-    $al = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-    if (stripos($al, 'de') === 0 || stripos($al, 'de-') !== false) return 'de';
     return 'it';
 }
 

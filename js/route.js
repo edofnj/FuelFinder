@@ -1,3 +1,11 @@
+// Escape per i popup Leaflet (bindPopup renderizza HTML): nomi stazione
+// arrivano dalle API esterne, le label partenza/arrivo dall'utente.
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 
     // --- LOADING OVERLAY ---
@@ -64,10 +72,17 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- MAP INIT ---
+    // Guard against Leaflet load failure — without try/catch a missing L
+    // aborts the rest of DOMContentLoaded, breaking GPS buttons & autocomplete.
+    if (typeof L === 'undefined') {
+        console.error('Leaflet (L) not loaded — map unavailable, continuing without map');
+        var map = null;
+    }
+    if (typeof L !== 'undefined') try {
     var map = L.map('routeMap', { zoomControl: true }).setView([44.5, 11.3], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19
+    L.tileLayer('/tiles.php?z={z}&x={x}&y={y}', {
+        attribution: '&copy; <a href="https://www.geoapify.com/">Geoapify</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 20
     }).addTo(map);
 
     // Icons defined once, reused for route markers and draggable preview pins
@@ -115,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // OSRM GeoJSON returns [lon, lat]; Leaflet wants [lat, lon]
         var latlngs = ROUTE_COORDS.map(function(c) { return [c[1], c[0]]; });
         var routeLine = L.polyline(latlngs, {
-            color: '#6c5ce7',
+            color: '#3b82f6',
             weight: 5,
             opacity: 0.85
         }).addTo(map);
@@ -124,15 +139,15 @@ document.addEventListener('DOMContentLoaded', function() {
         var endCoord   = [ROUTE_COORDS[ROUTE_COORDS.length - 1][1], ROUTE_COORDS[ROUTE_COORDS.length - 1][0]];
 
         L.marker(startCoord, { icon: startIcon }).addTo(map)
-            .bindPopup('<strong>' + (ROUTE_FROM.label || 'Partenza') + '</strong>');
+            .bindPopup('<strong>' + (escapeHtml(ROUTE_FROM.label) || 'Partenza') + '</strong>');
         L.marker(endCoord, { icon: endIcon }).addTo(map)
-            .bindPopup('<strong>' + (ROUTE_TO.label || 'Arrivo') + '</strong>');
+            .bindPopup('<strong>' + (escapeHtml(ROUTE_TO.label) || 'Arrivo') + '</strong>');
 
         // Station markers
         var stationMarkers = [];
         ROUTE_STATIONS.forEach(function(s) {
             var num   = s.idx + 1;
-            var color = s.idx === 0 ? '#00cec9' : (s.idx < 3 ? '#fdcb6e' : '#a29bfe');
+            var color = s.idx === 0 ? '#047857' : (s.idx < 3 ? '#0369a1' : '#475569');
             var icon  = L.divIcon({
                 html: '<div class="map-marker-station" style="background:' + color + '">' +
                       '<span><b>' + num + '.</b> ' + s.price.toFixed(3) + '</span></div>',
@@ -143,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var detourText = s.detour_km <= 0.1
                 ? ((window.FF_T && window.FF_T.route_on_route) || 'Sul percorso')
                 : '+' + s.detour_km + ' km ' + ((window.FF_T && window.FF_T.route_detour) || 'fuori rotta');
-            var popupHtml = '<strong>' + num + '. ' + s.nome + '</strong><br>' +
+            var popupHtml = '<strong>' + num + '. ' + escapeHtml(s.nome) + '</strong><br>' +
                 'EUR ' + s.price.toFixed(3) + '/L<br>' +
                 s.km_along + ' km · ' + detourText;
             var m = L.marker([s.lat, s.lon], { icon: icon }).addTo(map).bindPopup(popupHtml);
@@ -161,6 +176,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 stationMarkers[idx].openPopup();
             }
         };
+    }
+    } catch (e) {
+        console.error('Map init failed:', e);
+        map = null;
     }
 
     function scrollToCard(idx) {
@@ -191,9 +210,11 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('fromLabelInput').value = label;
         document.getElementById('fromInput').value      = label;
         updateCalcBtn();
-        if (!HAS_RESULTS) {
-            fromPin = placeDraggablePin(fromPin, lat, lon, startIcon,
-                'fromLatInput', 'fromLonInput', 'fromLabelInput');
+        if (!HAS_RESULTS && map && typeof placeDraggablePin === 'function') {
+            try {
+                fromPin = placeDraggablePin(fromPin, lat, lon, startIcon,
+                    'fromLatInput', 'fromLonInput', 'fromLabelInput');
+            } catch (e) { console.error('placeDraggablePin from:', e); }
         }
     }
 
@@ -203,9 +224,11 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('toLabelInput').value = label;
         document.getElementById('toInput').value      = label;
         updateCalcBtn();
-        if (!HAS_RESULTS) {
-            toPin = placeDraggablePin(toPin, lat, lon, endIcon,
-                'toLatInput', 'toLonInput', 'toLabelInput');
+        if (!HAS_RESULTS && map && typeof placeDraggablePin === 'function') {
+            try {
+                toPin = placeDraggablePin(toPin, lat, lon, endIcon,
+                    'toLatInput', 'toLonInput', 'toLabelInput');
+            } catch (e) { console.error('placeDraggablePin to:', e); }
         }
     }
 
@@ -282,34 +305,11 @@ document.addEventListener('DOMContentLoaded', function() {
             hideSugg();
             if (q.length < 3) return;
             timer = setTimeout(function() {
-                var base = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=it,de&addressdetails=1';
-                var hdrs = { 'Accept-Language': 'it', 'User-Agent': 'FuelFinder/1.0' };
-
-                // Try to parse "Street Name 12, City" → separate structured query.
-                // Nominatim structured search uses address interpolation and often finds
-                // house-level coords when the free-text search returns only the street.
-                var fetchList = [
-                    fetch(base + '&layer=address&q=' + encodeURIComponent(q), { headers: hdrs })
-                        .then(function(r) { return r.json(); }).catch(function() { return []; })
-                ];
-                var numM = q.match(/^([^0-9,]+?)\s+(\d+[a-zA-Z]?)\s*(?:,\s*(.+))?$/);
-                if (numM) {
-                    var sStreet = numM[1].trim();
-                    var sNum    = numM[2];
-                    var sCity   = (numM[3] || '').trim();
-                    var structUrl = base + '&housenumber=' + encodeURIComponent(sNum)
-                                  + '&street=' + encodeURIComponent(sStreet)
-                                  + (sCity ? '&city=' + encodeURIComponent(sCity) : '');
-                    fetchList.push(
-                        fetch(structUrl, { headers: hdrs })
-                            .then(function(r) { return r.json(); }).catch(function() { return []; })
-                    );
-                }
-
-                Promise.all(fetchList).then(function(results) {
-                    // Merge: house-level results (address.house_number present) first
-                    var allItems = [];
-                    results.forEach(function(r) { if (Array.isArray(r)) allItems = allItems.concat(r); });
+                fetch('/geocode.php?q=' + encodeURIComponent(q))
+                    .then(function(r) { return r.json(); })
+                    .catch(function() { return []; })
+                    .then(function(allItems) {
+                    if (!Array.isArray(allItems)) allItems = [];
                     allItems.sort(function(a, b) {
                         return ((b.address && b.address.house_number) ? 1 : 0)
                              - ((a.address && a.address.house_number) ? 1 : 0);

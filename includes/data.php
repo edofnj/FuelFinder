@@ -146,7 +146,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
     }
 
     if (empty($stations)) {
-        $apiError = t('err_no_stations');
+        // Distingue "il provider non ha risposto" da "zona davvero senza distributori":
+        // suggerire di aumentare il raggio quando l'API è giù manda l'utente fuori strada.
+        $apiError = !empty($GLOBALS['ospz_last_error'])
+            ? t('err_api_unavailable')
+            : t('err_no_stations');
     } else {
         foreach ($stations as $s) {
             $brand = $s['brand'];

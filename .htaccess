@@ -1,5 +1,11 @@
 DirectoryIndex index.php
 
+# Pagine di errore custom (in stile col sito). Standalone: nessuna dipendenza da
+# DB/config, così restano renderizzabili anche quando l'app è in errore (500).
+ErrorDocument 403 /403.php
+ErrorDocument 404 /404.php
+ErrorDocument 500 /500.php
+
 # Blocca file nascosti (.git, .env, .htaccess stesso, .DS_Store)
 <FilesMatch "^\.">
     Require all denied
@@ -49,7 +55,7 @@ DirectoryIndex index.php
     # (REQUEST_URI resta /pagina, senza .php).
     RewriteCond %{REQUEST_FILENAME} \.php$
     RewriteCond %{REQUEST_URI} \.php
-    RewriteCond %{REQUEST_URI} !/(index|route|account|profile|garage|stats|track|privacy|geocode|tiles|tos|landing)\.php$
+    RewriteCond %{REQUEST_URI} !/(index|route|account|profile|garage|stats|track|privacy|geocode|tiles|tos|landing|404|500|403)\.php$
     RewriteRule .* - [F,L]
 </IfModule>
 

@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/i18n.php';
 $lang = function_exists('currentLang') ? currentLang() : 'it';
 $de   = $lang === 'de';
-$updated = '05/06/2026';
+$updated = '25/06/2026';
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars($lang) ?>">
@@ -70,7 +70,7 @@ Kontakt für Datenschutzanfragen: <a href="mailto:edoardo@fmenegazzi.it">edoardo
 <p>Kontodaten: bis zur Löschung des Kontos. Anonyme Statistik: aggregiert, ohne Personenbezug. Login-Versuche: kurzfristig (Sicherheit).</p>
 
 <h2>6. Ihre Rechte</h2>
-<p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch sowie auf Beschwerde bei einer Aufsichtsbehörde. Zur Löschung Ihres Kontos schreiben Sie an <a href="mailto:edoardo@fmenegazzi.it">edoardo@fmenegazzi.it</a>.</p>
+<p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch sowie auf Beschwerde bei einer Aufsichtsbehörde. Du kannst dein <b>Konto jederzeit selbst löschen</b> – im Bereich „Gefahrenzone“ auf der Seite <a href="/profile">Profil</a>: Die Löschung erfolgt sofort und unwiderruflich (Konto, Garage und zugehörige Daten). Für alle weiteren Anfragen schreibe an <a href="mailto:edoardo@fmenegazzi.it">edoardo@fmenegazzi.it</a>.</p>
 
 <?php else: ?>
 <h1>Informativa Privacy &amp; Cookie</h1>
@@ -105,7 +105,7 @@ Contatto per richieste privacy: <a href="mailto:edoardo@fmenegazzi.it">edoardo@f
 <p>Dati account: fino alla cancellazione dell'account. Statistiche anonime: in forma aggregata, senza riferimento alla persona. Tentativi di login: breve periodo (sicurezza).</p>
 
 <h2>6. I tuoi diritti</h2>
-<p>Hai diritto di accesso, rettifica, cancellazione, limitazione, portabilità e opposizione, oltre al reclamo all'Autorità Garante. Per cancellare l'account scrivi a <a href="mailto:edoardo@fmenegazzi.it">edoardo@fmenegazzi.it</a>.</p>
+<p>Hai diritto di accesso, rettifica, cancellazione, limitazione, portabilità e opposizione, oltre al reclamo all'Autorità Garante. Puoi <b>cancellare il tuo account in autonomia</b>, in qualsiasi momento, dalla sezione “Zona pericolosa” della pagina <a href="/profile">Profilo</a>: l'eliminazione è immediata e irreversibile (account, garage e dati associati). Per ogni altra richiesta puoi scrivere a <a href="mailto:edoardo@fmenegazzi.it">edoardo@fmenegazzi.it</a>.</p>
 <?php endif; ?>
 
 <a class="back" href="/">&larr; <?= $de ? 'Zurück' : 'Torna al sito' ?></a>

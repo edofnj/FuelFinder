@@ -34,7 +34,7 @@ function refererHost() {
 // Parsing minimale UA → [device, browser, os]
 function parseUA($ua = null) {
     $ua = $ua ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
-    if (preg_match('/bot|crawl|spider|slurp|bingpreview|facebookexternal|preview/i', $ua)) {
+    if ($ua === '' || preg_match('~bot|crawl|spider|slurp|bingpreview|facebookexternal|preview|headless|python-requests|python-httpx|aiohttp|\bcurl\b|\bwget\b|libwww|http-client|go-http|okhttp|java/|apache-httpclient|axios|node-fetch|got |scrapy|phantomjs|puppeteer|playwright|monitor|uptime|pingdom|statuscake|gtmetrix|lighthouse|semrush|ahrefs|mj12|dotbot|petal|bytespider|dataforseo|googleother|gptbot|claudebot|anthropic|ccbot|amazonbot|yandex|baidu|sogou~i', $ua)) {
         $device = 'Bot';
     } elseif (preg_match('/iPad|Tablet/i', $ua)) {
         $device = 'Tablet';
@@ -82,6 +82,9 @@ function track($type, array $fields = []) {
             ':meta'    => isset($fields['meta']) ? json_encode($fields['meta']) : null,
         ]);
     } catch (Throwable $e) {
-        // silenzioso di proposito: le metriche non devono mai impattare l'utente
+        // Silenzioso per l'utente (le metriche non devono mai rompere la pagina),
+        // ma tracciato nei log del container: così la perdita di eventi (DB giù o
+        // connessioni del Postgres condiviso esaurite) resta visibile e diagnosticabile.
+        error_log('[ff-metrics] track failed: ' . $e->getMessage());
     }
 }

@@ -18,48 +18,76 @@ function maskEmail($e) {
     return $vis . str_repeat('*', max(1, mb_strlen($u) - 2)) . '@' . $p[1];
 }
 
-// ---- KPI ----
+// ---- Filtri qualità dato ----------------------------------------------------
+// Soglia "flood": un singolo visitor_hash (già giornaliero, perché il salt ruota
+// ogni 24h) con più pageview di così non è un umano ma un crawler con UA
+// browser-like che sfugge al regex anti-bot. Tunabile.
+const FLOOD_PV = 80;
+
+// Frammento SQL riusabile: eventi "reali" = niente bot dichiarati, niente sessioni
+// flood, niente traffico dell'admin loggato. $a = alias di events ('' oppure 'e').
+$humanFilter = function ($a = '') {
+    $p = $a !== '' ? $a . '.' : '';
+    return "{$p}ua_device IS DISTINCT FROM 'Bot'
+        AND ({$p}user_id IS NULL OR {$p}user_id NOT IN (SELECT id FROM users WHERE is_admin))
+        AND ({$p}visitor_hash IS NULL OR {$p}visitor_hash NOT IN (
+              SELECT visitor_hash FROM events GROUP BY visitor_hash
+              HAVING count(*) FILTER (WHERE type='pageview') > " . FLOOD_PV . "))";
+};
+$H  = $humanFilter();     // senza alias
+$HE = $humanFilter('e');  // con alias e.
+
+// ---- KPI (solo traffico reale) ----
 $kpi = [
-    'pageviews'  => (int)scalar("SELECT count(*) FROM events WHERE type='pageview'"),
-    'visitors'   => (int)scalar("SELECT count(DISTINCT visitor_hash) FROM events"),
-    'searches'   => (int)scalar("SELECT count(*) FROM events WHERE type IN ('search','sos')"),
-    'routes'     => (int)scalar("SELECT count(*) FROM events WHERE type='route'"),
-    'users'      => (int)scalar("SELECT count(*) FROM users"),
-    'vehicles'   => (int)scalar("SELECT count(*) FROM vehicles"),
-    'signups30'  => (int)scalar("SELECT count(*) FROM users WHERE created_at > now() - interval '30 days'"),
+    'pageviews'  => (int)scalar("SELECT count(*) FROM events WHERE type='pageview' AND $H"),
+    'visitors'   => (int)scalar("SELECT count(DISTINCT visitor_hash) FROM events WHERE $H"),
+    'searches'   => (int)scalar("SELECT count(*) FROM events WHERE type IN ('search','sos') AND $H"),
+    'routes'     => (int)scalar("SELECT count(*) FROM events WHERE type='route' AND $H"),
+    'users'      => (int)scalar("SELECT count(*) FROM users WHERE NOT is_admin"),
+    'vehicles'   => (int)scalar("SELECT count(*) FROM vehicles WHERE user_id NOT IN (SELECT id FROM users WHERE is_admin)"),
+    'signups30'  => (int)scalar("SELECT count(*) FROM users WHERE NOT is_admin AND created_at > now() - interval '30 days'"),
 ];
-// engagement utenti registrati
-$dau = (int)scalar("SELECT count(DISTINCT user_id) FROM events WHERE user_id IS NOT NULL AND ts > now() - interval '1 day'");
-$wau = (int)scalar("SELECT count(DISTINCT user_id) FROM events WHERE user_id IS NOT NULL AND ts > now() - interval '7 days'");
-$mau = (int)scalar("SELECT count(DISTINCT user_id) FROM events WHERE user_id IS NOT NULL AND ts > now() - interval '30 days'");
 
-// funnel 30 giorni
-$fVisitors = (int)scalar("SELECT count(DISTINCT visitor_hash) FROM events WHERE ts > now() - interval '30 days'");
-$fSearchers= (int)scalar("SELECT count(DISTINCT visitor_hash) FROM events WHERE type IN ('search','sos') AND ts > now() - interval '30 days'");
-$fSignups  = (int)scalar("SELECT count(*) FROM users WHERE created_at > now() - interval '30 days'");
+// Traffico escluso dai conteggi (trasparenza) + freschezza dati
+$exBot     = (int)scalar("SELECT count(*) FROM events WHERE type='pageview' AND ua_device='Bot'");
+$exFlood   = (int)scalar("SELECT count(*) FROM events WHERE type='pageview' AND visitor_hash IN (SELECT visitor_hash FROM events GROUP BY visitor_hash HAVING count(*) FILTER (WHERE type='pageview') > " . FLOOD_PV . ")");
+$exAdmin   = (int)scalar("SELECT count(*) FROM events WHERE user_id IN (SELECT id FROM users WHERE is_admin)");
+$lastEvent = scalar("SELECT to_char(max(ts),'DD/MM/YYYY HH24:MI') FROM events");
 
-// ---- Serie temporale 30 giorni ----
+// engagement: solo utenti registrati TUTTORA esistenti e non-admin (events.user_id
+// non ha foreign key → gli utenti cancellati lascerebbero eventi orfani che
+// gonfierebbero il conteggio, rendendolo incoerente con "Utenti registrati").
+$dau = (int)scalar("SELECT count(DISTINCT user_id) FROM events WHERE user_id IN (SELECT id FROM users WHERE NOT is_admin) AND ts > now() - interval '1 day'");
+$wau = (int)scalar("SELECT count(DISTINCT user_id) FROM events WHERE user_id IN (SELECT id FROM users WHERE NOT is_admin) AND ts > now() - interval '7 days'");
+$mau = (int)scalar("SELECT count(DISTINCT user_id) FROM events WHERE user_id IN (SELECT id FROM users WHERE NOT is_admin) AND ts > now() - interval '30 days'");
+
+// funnel 30 giorni (traffico reale)
+$fVisitors = (int)scalar("SELECT count(DISTINCT visitor_hash) FROM events WHERE ts > now() - interval '30 days' AND $H");
+$fSearchers= (int)scalar("SELECT count(DISTINCT visitor_hash) FROM events WHERE type IN ('search','sos') AND ts > now() - interval '30 days' AND $H");
+$fSignups  = (int)scalar("SELECT count(*) FROM users WHERE NOT is_admin AND created_at > now() - interval '30 days'");
+
+// ---- Serie temporale 30 giorni (filtro nell'ON per non perdere i giorni vuoti) ----
 $series = q("
     SELECT to_char(d, 'YYYY-MM-DD') AS day,
            count(e.id) FILTER (WHERE e.type='pageview')          AS pv,
            count(DISTINCT e.visitor_hash)                        AS uniq,
            count(e.id) FILTER (WHERE e.type IN ('search','sos'))  AS searches
     FROM generate_series(current_date - interval '29 days', current_date, interval '1 day') d
-    LEFT JOIN events e ON e.ts::date = d::date
+    LEFT JOIN events e ON e.ts::date = d::date AND $HE
     GROUP BY d ORDER BY d
 ");
 
-// ---- Breakdown ----
-$byFuel    = q("SELECT coalesce(fuel,'?') k, count(*) c FROM events WHERE type IN ('search','sos') AND fuel IS NOT NULL GROUP BY 1 ORDER BY c DESC");
-$byCountry = q("SELECT coalesce(country,'?') k, count(*) c FROM events WHERE type IN ('search','sos','route') AND country IS NOT NULL GROUP BY 1 ORDER BY c DESC");
-$byRadius  = q("SELECT radius::text k, count(*) c FROM events WHERE type='search' AND radius IS NOT NULL GROUP BY radius ORDER BY radius");
-$byMode    = q("SELECT coalesce(mode,'?') k, count(*) c FROM events WHERE type='search' AND mode IS NOT NULL GROUP BY 1 ORDER BY c DESC");
-$byDevice  = q("SELECT coalesce(ua_device,'?') k, count(*) c FROM events WHERE type='pageview' GROUP BY 1 ORDER BY c DESC");
-$byBrowser = q("SELECT coalesce(ua_browser,'?') k, count(*) c FROM events WHERE type='pageview' GROUP BY 1 ORDER BY c DESC");
-$byOs      = q("SELECT coalesce(ua_os,'?') k, count(*) c FROM events WHERE type='pageview' GROUP BY 1 ORDER BY c DESC");
-$byRef     = q("SELECT coalesce(referrer_host,'(diretto)') k, count(*) c FROM events WHERE type='pageview' GROUP BY 1 ORDER BY c DESC LIMIT 10");
-$byType    = q("SELECT type k, count(*) c FROM events GROUP BY type ORDER BY c DESC");
-$recentUsers = q("SELECT email, to_char(created_at,'DD/MM/YYYY HH24:MI') created, to_char(last_login,'DD/MM/YYYY HH24:MI') last_login FROM users ORDER BY created_at DESC LIMIT 25");
+// ---- Breakdown (solo traffico reale) ----
+$byFuel    = q("SELECT coalesce(fuel,'?') k, count(*) c FROM events WHERE type IN ('search','sos') AND fuel IS NOT NULL AND $H GROUP BY 1 ORDER BY c DESC");
+$byCountry = q("SELECT coalesce(country,'?') k, count(*) c FROM events WHERE type IN ('search','sos','route') AND country IS NOT NULL AND $H GROUP BY 1 ORDER BY c DESC");
+$byRadius  = q("SELECT radius::text k, count(*) c FROM events WHERE type='search' AND radius IS NOT NULL AND $H GROUP BY radius ORDER BY radius");
+$byMode    = q("SELECT coalesce(mode,'?') k, count(*) c FROM events WHERE type='search' AND mode IS NOT NULL AND $H GROUP BY 1 ORDER BY c DESC");
+$byDevice  = q("SELECT coalesce(ua_device,'?') k, count(*) c FROM events WHERE type='pageview' AND $H GROUP BY 1 ORDER BY c DESC");
+$byBrowser = q("SELECT coalesce(ua_browser,'?') k, count(*) c FROM events WHERE type='pageview' AND $H GROUP BY 1 ORDER BY c DESC");
+$byOs      = q("SELECT coalesce(ua_os,'?') k, count(*) c FROM events WHERE type='pageview' AND $H GROUP BY 1 ORDER BY c DESC");
+$byRef     = q("SELECT coalesce(referrer_host,'(diretto)') k, count(*) c FROM events WHERE type='pageview' AND $H GROUP BY 1 ORDER BY c DESC LIMIT 10");
+$byType    = q("SELECT type k, count(*) c FROM events WHERE $H GROUP BY type ORDER BY c DESC");
+$recentUsers = q("SELECT email, to_char(created_at,'DD/MM/YYYY HH24:MI') created, to_char(last_login,'DD/MM/YYYY HH24:MI') last_login FROM users WHERE NOT is_admin ORDER BY created_at DESC LIMIT 25");
 
 function col($rows, $key) { return array_map(fn($r) => $r[$key], $rows); }
 $convSearch = $fVisitors > 0 ? round(100 * $fSearchers / $fVisitors, 1) : 0;
@@ -104,15 +132,16 @@ $convSignup = $fVisitors > 0 ? round(100 * $fSignups / $fVisitors, 1) : 0;
   <div><a href="/">← App</a> &nbsp;·&nbsp; <a href="#" id="logoutLink">Logout</a></div>
 </div>
 
-<h2>Panoramica</h2>
+<h2>Panoramica <span style="font-weight:400;text-transform:none;letter-spacing:0">— solo traffico reale</span></h2>
 <div class="cards">
-  <div class="kpi"><div class="v"><?= number_format($kpi['pageviews']) ?></div><div class="l">Pageview totali</div></div>
-  <div class="kpi"><div class="v"><?= number_format($kpi['visitors']) ?></div><div class="l">Visitatori unici*</div></div>
+  <div class="kpi"><div class="v"><?= number_format($kpi['pageviews']) ?></div><div class="l">Pageview (reali)</div></div>
+  <div class="kpi"><div class="v"><?= number_format($kpi['visitors']) ?></div><div class="l">Visite uniche/giorno*</div></div>
   <div class="kpi"><div class="v"><?= number_format($kpi['searches']) ?></div><div class="l">Ricerche</div></div>
   <div class="kpi"><div class="v"><?= number_format($kpi['routes']) ?></div><div class="l">Rotte calcolate</div></div>
   <div class="kpi"><div class="v"><?= number_format($kpi['users']) ?></div><div class="l">Utenti registrati</div><div class="s">+<?= $kpi['signups30'] ?> (30gg)</div></div>
   <div class="kpi"><div class="v"><?= number_format($kpi['vehicles']) ?></div><div class="l">Veicoli salvati</div></div>
 </div>
+<p class="note">Conteggi al netto del traffico non umano e interno — esclusi: <b><?= number_format($exFlood) ?></b> pageview da sessioni automatiche (&gt;<?= FLOOD_PV ?>/giorno), <b><?= number_format($exBot) ?></b> da bot dichiarati, <b><?= number_format($exAdmin) ?></b> eventi dell'account admin. Ultimo evento registrato: <b><?= htmlspecialchars($lastEvent ?? '—') ?></b>.</p>
 
 <h2>Engagement utenti registrati</h2>
 <div class="cards">
@@ -167,7 +196,7 @@ $convSignup = $fVisitors > 0 ? round(100 * $fSignups / $fVisitors, 1) : 0;
   </div>
 </div>
 
-<p class="note">* Visitatori unici: conteggio su hash anonimo con salt giornaliero (privacy-friendly, stile Plausible). Il salt ruota ogni giorno, quindi il totale all-time è la somma degli unici giornalieri. Nessun IP grezzo è memorizzato.</p>
+<p class="note">* Visite uniche/giorno: hash anonimo con salt giornaliero (privacy-friendly, stile Plausible). Il salt ruota ogni 24h, quindi la stessa persona in giorni diversi conta più volte: il valore è la somma delle visite uniche giornaliere, <b>non</b> il numero di persone distinte. Nessun IP grezzo è memorizzato. Da tutti i conteggi sono esclusi i bot, le sessioni con oltre <?= FLOOD_PV ?> pageview/giorno (crawler con UA browser-like) e il traffico dell'account amministratore.</p>
 
 <script>
 const PALETTE=['#10b981','#3b82f6','#10b981','#8b5cf6','#f59e0b','#db61a2','#56d4dd','#8b949e'];

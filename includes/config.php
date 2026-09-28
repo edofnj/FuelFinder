@@ -1,5 +1,8 @@
 <?php
 define('OSPZ_API', 'https://carburanti.mise.gov.it/ospzApi');
+// Raggio massimo di /search/zone: oltre, il MIMIT tronca comunque i risultati
+// a 10 km (verificato: raggio 10 e 20 restituiscono gli stessi impianti).
+define('MIMIT_MAX_RADIUS', 10);
 define('URL_ANAGRAFICA', 'https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv');
 define('FILE_ANAGRAFICA', __DIR__ . '/../anagrafica.csv');
 
@@ -12,6 +15,10 @@ if ($envKey !== false && $envKey !== '') {
 } else {
     define('TANKERKOENIG_KEY', '');
 }
+
+// Valhalla self-hostato (container nella rete docker). Sovrascrivibile da env o
+// config.local.php per lo sviluppo locale, dove il container non è raggiungibile.
+if (!defined('VALHALLA_URL')) define('VALHALLA_URL', getenv('VALHALLA_URL') ?: 'http://valhalla:8002');
 
 // Bootstrap DB + metriche + auth (connessione DB lazy, sessione no-op in CLI).
 require_once __DIR__ . '/db.php';

@@ -2,6 +2,7 @@
 anagrafica.csv
 anagrafica.csv.ser
 anagrafica.csv.json
+anagrafica.csv.v2.json
 prezzi.csv
 *.lock
 
@@ -24,3 +25,6 @@ cache/
 includes/config.local.php
 docker-compose.yml
 .user.ini
+
+# Output test Playwright
+.playwright-mcp/

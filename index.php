@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') track('pageview');
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="stylesheet" href="/fonts/fonts.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 </head>
 <body>
 
@@ -357,6 +357,6 @@ window.FF_CSRF = <?= json_encode(csrfToken()) ?>;
 </script>
 <?php include __DIR__ . '/includes/cookie_banner.php'; ?>
 <script src="js/tutorial.js"></script>
-<script src="js/app.js"></script>
+<script src="js/app.js?v=<?= filemtime(__DIR__ . '/js/app.js') ?>"></script>
 </body>
 </html>

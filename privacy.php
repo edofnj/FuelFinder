@@ -27,7 +27,8 @@ $updated = '25/06/2026';
   .legal p,.legal li{font-size:.92rem;color:#d4d4e4}
   .legal ul{padding-left:20px} .legal li{margin:4px 0}
   .legal table{width:100%;border-collapse:collapse;margin:8px 0;font-size:.86rem}
-  .legal th,.legal td{text-align:left;padding:8px;border-bottom:1px solid var(--glass-border,#2c3a50);vertical-align:top}
+  .legal th,.legal td{text-align:left;padding:8px;border-bottom:1px solid var(--glass-border,#2c3a50);vertical-align:top;overflow-wrap:anywhere}
+  @media(max-width:560px){.legal table{font-size:.78rem}.legal th,.legal td{padding:6px 4px}}
   .legal th{color:var(--muted,#94a3b8);font-weight:600}
   .legal .ph{background:rgba(16,185,129,.12);border:1px dashed var(--accent,#10b981);border-radius:6px;padding:1px 6px;font-size:.85em}
   .legal .back{display:inline-block;margin-top:26px;color:var(--muted,#94a3b8);text-decoration:none}

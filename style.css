@@ -88,7 +88,7 @@ input[type="number"]{-moz-appearance:textfield}
 #addrSuggestions{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface-solid);border:1px solid var(--border-hi);border-radius:var(--radius);z-index:999;max-height:240px;overflow-y:auto;display:none;box-shadow:0 20px 60px rgba(0,0,0,0.5);backdrop-filter:blur(20px)}
 .addr-suggestion{padding:12px 16px;font-size:0.82rem;cursor:pointer;border-bottom:1px solid var(--border);line-height:1.5;transition:all 0.15s}
 .addr-suggestion:last-child{border-bottom:none}
-.addr-suggestion:hover{background:rgba(16,185,129,0.1);color:var(--accent2)}
+.addr-suggestion:hover,.addr-suggestion.active{background:rgba(16,185,129,0.1);color:var(--accent2)}
 .addr-suggestion small{display:block;font-size:0.7rem;color:var(--muted);margin-top:3px}
 
 /* GARAGE */
@@ -199,6 +199,11 @@ input[type="number"]{-moz-appearance:textfield}
     .results-header{margin-bottom:16px}
 }
 @media(max-width:420px){
+    /* Header: logo + lingua + Accedi sforavano di ~6px a 390px (scroll orizzontale) */
+    .site-header{padding:16px 14px 0;gap:10px}
+    .logo-text{font-size:1.25rem}
+    .acct-wrap{margin-left:0}
+    .acct-btn.acct-login{padding:0 10px}
     .row-2{grid-template-columns:1fr}
     .layout{padding:12px}
     .res-card{padding:14px}
@@ -371,3 +376,4 @@ input[type="number"]{-moz-appearance:textfield}
 .auth-msg{color:#f87171;font-size:.8rem;min-height:16px;text-align:center;margin-top:10px}
 .auth-msg.err{color:#f87171}
 .auth-back{display:block;text-align:center;color:var(--muted,#94a3b8);text-decoration:none;font-size:.8rem;margin-top:18px}
+.map-marker-dot{width:12px;height:12px;border-radius:50%;background:#475569;border:2px solid rgba(255,255,255,0.7);box-shadow:0 2px 6px rgba(0,0,0,0.4)}

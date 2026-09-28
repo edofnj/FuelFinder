@@ -26,6 +26,9 @@ $bDe = (function_exists('currentLang') && currentLang() === 'de');
 .ff-cookie a{color:var(--accent,#10b981)}
 .ff-cookie button{flex:none;background:var(--accent,#10b981);color:#04211a;border:none;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.82rem}
 @media(max-width:560px){.ff-cookie{flex-direction:column;align-items:stretch;text-align:center}.ff-credits{display:none}}
+/* Su mobile la pagina scorre: footer in coda al contenuto invece che fisso
+   (fisso copriva il pulsante "Calcola Convenienza"). */
+@media(max-width:820px){.ff-foot{position:static;width:max-content;max-width:calc(100% - 28px);margin:8px auto 20px}}
 </style>
 <script>
 (function(){

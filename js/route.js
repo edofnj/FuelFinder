@@ -1,3 +1,27 @@
+// Navigazione da tastiera nei suggerimenti indirizzo: frecce per scorrere,
+// Invio per scegliere (il primo se nessuno è evidenziato). Ritorna true se
+// ha gestito il tasto. La selezione riusa l'handler 'mousedown' dei div.
+function suggKeyNav(e, box) {
+    var items = box.querySelectorAll('.addr-suggestion');
+    if (box.style.display === 'none' || !items.length) return false;
+    var cur = box.querySelector('.addr-suggestion.active');
+    var i   = Array.prototype.indexOf.call(items, cur);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        i = e.key === 'ArrowDown' ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1);
+        if (cur) cur.classList.remove('active');
+        items[i].classList.add('active');
+        items[i].scrollIntoView({ block: 'nearest' });
+        return true;
+    }
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        (cur || items[0]).dispatchEvent(new MouseEvent('mousedown', { cancelable: true }));
+        return true;
+    }
+    return false;
+}
+
 // Escape per i popup Leaflet (bindPopup renderizza HTML): nomi stazione
 // arrivano dalle API esterne, le label partenza/arrivo dall'utente.
 function escapeHtml(s) {
@@ -143,25 +167,38 @@ document.addEventListener('DOMContentLoaded', function() {
         L.marker(endCoord, { icon: endIcon }).addTo(map)
             .bindPopup('<strong>' + (escapeHtml(ROUTE_TO.label) || 'Arrivo') + '</strong>');
 
-        // Station markers
+        // Station markers: etichetta col prezzo solo per le prime MAP_LABELS
+        // (con 100+ risultati le etichette si impilavano coprendo il percorso),
+        // le altre come puntini cliccabili.
+        var MAP_LABELS = 10;
         var stationMarkers = [];
         ROUTE_STATIONS.forEach(function(s) {
             var num   = s.idx + 1;
             var color = s.idx === 0 ? '#047857' : (s.idx < 3 ? '#0369a1' : '#475569');
-            var icon  = L.divIcon({
-                html: '<div class="map-marker-station" style="background:' + color + '">' +
-                      '<span><b>' + num + '.</b> ' + s.price.toFixed(3) + '</span></div>',
-                className: '',
-                iconSize: [68, 24],
-                iconAnchor: [34, 12]
-            });
+            var icon  = s.idx < MAP_LABELS
+                ? L.divIcon({
+                    html: '<div class="map-marker-station" style="background:' + color + '">' +
+                          '<span><b>' + num + '.</b> ' + s.price.toFixed(3) + '</span></div>',
+                    className: '',
+                    iconSize: [68, 24],
+                    iconAnchor: [34, 12]
+                })
+                : L.divIcon({
+                    html: '<div class="map-marker-dot"></div>',
+                    className: '',
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                });
             var detourText = s.detour_km <= 0.1
                 ? ((window.FF_T && window.FF_T.route_on_route) || 'Sul percorso')
                 : '+' + s.detour_km + ' km ' + ((window.FF_T && window.FF_T.route_detour) || 'fuori rotta');
             var popupHtml = '<strong>' + num + '. ' + escapeHtml(s.nome) + '</strong><br>' +
                 'EUR ' + s.price.toFixed(3) + '/L<br>' +
                 s.km_along + ' km · ' + detourText;
-            var m = L.marker([s.lat, s.lon], { icon: icon }).addTo(map).bindPopup(popupHtml);
+            var m = L.marker([s.lat, s.lon], {
+                icon: icon,
+                zIndexOffset: s.idx < MAP_LABELS ? 10000 - s.idx * 100 : 0 // etichette sopra i puntini, la migliore in cima
+            }).addTo(map).bindPopup(popupHtml);
             m.on('click', function() { scrollToCard(s.idx); });
             stationMarkers.push(m);
         });
@@ -371,6 +408,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         inp.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') hideSugg();
+            if (suggKeyNav(e, sugg)) return;
             if (e.key === 'Enter') e.preventDefault();
         });
         inp.addEventListener('blur', function() {

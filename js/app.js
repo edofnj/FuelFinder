@@ -1,3 +1,27 @@
+// Navigazione da tastiera nei suggerimenti indirizzo: frecce per scorrere,
+// Invio per scegliere (il primo se nessuno è evidenziato). Ritorna true se
+// ha gestito il tasto. La selezione riusa l'handler 'mousedown' dei div.
+function suggKeyNav(e, box) {
+    var items = box.querySelectorAll('.addr-suggestion');
+    if (box.style.display === 'none' || !items.length) return false;
+    var cur = box.querySelector('.addr-suggestion.active');
+    var i   = Array.prototype.indexOf.call(items, cur);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        i = e.key === 'ArrowDown' ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1);
+        if (cur) cur.classList.remove('active');
+        items[i].classList.add('active');
+        items[i].scrollIntoView({ block: 'nearest' });
+        return true;
+    }
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        (cur || items[0]).dispatchEvent(new MouseEvent('mousedown', { cancelable: true }));
+        return true;
+    }
+    return false;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
@@ -329,6 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     addrInput.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') addrHideSugg();
+        if (suggKeyNav(e, addrSugg)) return;
         if (e.key === 'Enter') e.preventDefault();
     });
 

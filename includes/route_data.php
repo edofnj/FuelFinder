@@ -96,7 +96,7 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
         ]],
     ]);
 
-    $ch = curl_init('http://valhalla:8002/route');
+    $ch = curl_init(VALHALLA_URL . '/route');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
@@ -168,6 +168,20 @@ function sampleRouteWaypoints(array $coords, float $stepKm = 8.0): array {
     return $waypoints;
 }
 
+// Primi $km chilometri della polilinea (coords GeoJSON [lon, lat]).
+function routeHead(array $coords, float $km): array {
+    $out = []; $acc = 0.0; $prev = null;
+    foreach ($coords as $c) {
+        if ($prev !== null) {
+            $acc += getDistance((float)$prev[1], (float)$prev[0], (float)$c[1], (float)$c[0]);
+            if ($acc > $km) { $out[] = $c; break; }
+        }
+        $out[] = $c;
+        $prev  = $c;
+    }
+    return $out;
+}
+
 function stationRouteInfo(float $sLat, float $sLon, array $routeCoords): array {
     $minDist     = PHP_FLOAT_MAX;
     $bestKmAlong = 0.0;
@@ -229,10 +243,15 @@ function stationRouteInfo(float $sLat, float $sLon, array $routeCoords): array {
     ];
 }
 
-function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): array {
+// MIMIT applica un rate limit per IP (~20 richieste ravvicinate, poi 429).
+// Le richieste partono quindi a piccoli blocchi con pausa, e le zone fallite
+// vengono ritentate una volta più lentamente. $failed riporta quante zone
+// restano scoperte, così la UI può avvisare di risultati parziali invece di
+// mostrare in silenzio solo i primi km del percorso.
+function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType, ?int &$failed = null): array {
+    $failed = 0;
     if (empty($waypoints)) return [];
 
-    $fuelId    = tipoToFuelId($fuelType);
     $ttl       = 3600;
     $namespace = 'routepts';
     $all       = []; // sid => station
@@ -240,9 +259,7 @@ function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): 
 
     // Phase 1: cache check
     foreach ($waypoints as $idx => $wp) {
-        $key    = sprintf('rpt_%.3f_%.3f_%.0f_%s',
-            round($wp['lat'], 3), round($wp['lon'], 3), $radiusKm, $fuelType);
-        $cached = cacheGet($namespace, $key, $ttl);
+        $cached = cacheGet($namespace, routePointCacheKey($wp, $radiusKm, $fuelType), $ttl);
         if ($cached !== null) {
             foreach ($cached as $sid => $station) {
                 if (!isset($all[$sid])) $all[$sid] = $station;
@@ -255,128 +272,161 @@ function routeSearchMimit(array $waypoints, float $radiusKm, string $fuelType): 
     if (empty($toFetch)) return array_values($all);
 
     $anagrafica = caricaAnagrafica();
-    $fuelIdInt  = (int)$fuelId;
 
-    // Phase 2: curl_multi in batches of 10
-    $mh      = curl_multi_init();
-    $handles = [];
-    foreach ($toFetch as $idx => $wp) {
-        $payload = json_encode([
-            'points'        => [['lat' => $wp['lat'], 'lng' => $wp['lon']]],
-            'radius'        => $radiusKm,
-            'fuelType'      => $fuelId,
-            'refuelingMode' => 'x',
-            'priceOrder'    => 'asc',
-        ]);
-        $ch = curl_init(OSPZ_API . '/search/zone');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'User-Agent: FuelFinder/1.0'],
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_TIMEOUT        => 10,
-        ]);
-        $handles[$idx] = $ch;
+    // Phase 2: finestra scorrevole (max 8 richieste attive, partenze
+    // distanziate) con scadenza complessiva; le zone fallite vengono
+    // ritentate una volta, più lentamente, se resta tempo.
+    $deadline = microtime(true) + 30;
+    $pending  = routeMimitFetch($toFetch, $radiusKm, $fuelType, $anagrafica, $all, 8, 0.2, $deadline);
+    if (!empty($pending) && $deadline - microtime(true) > 5) {
+        usleep(1500000);
+        $pending = routeMimitFetch($pending, $radiusKm, $fuelType, $anagrafica, $all, 2, 0.6, $deadline);
     }
 
-    $indices  = array_keys($handles);
-    $numFetch = count($indices);
-    $pos      = 0;
+    $failed = count($pending);
+    return array_values($all);
+}
 
-    while ($pos < $numFetch) {
-        $windowEnd = min($pos + 10, $numFetch);
-        for ($k = $pos; $k < $windowEnd; $k++) {
-            curl_multi_add_handle($mh, $handles[$indices[$k]]);
+function routePointCacheKey(array $wp, float $radiusKm, string $fuelType): string {
+    return sprintf('rpt_%.3f_%.3f_%.0f_%s',
+        round($wp['lat'], 3), round($wp['lon'], 3), $radiusKm, $fuelType);
+}
+
+// Interroga MIMIT per i waypoint dati con al massimo $concurrency richieste
+// attive e almeno $spacing secondi tra una partenza e l'altra (rate limit).
+// Aggiunge le stazioni trovate a $all, mette in cache le risposte valide e
+// ritorna i waypoint falliti (429, timeout, non partiti entro $deadline).
+function routeMimitFetch(array $toFetch, float $radiusKm, string $fuelType, array $anagrafica,
+                         array &$all, int $concurrency, float $spacing, float $deadline): array {
+    $fuelId    = tipoToFuelId($fuelType);
+    $fuelIdInt = (int)$fuelId;
+    $failed    = [];
+    $queue     = $toFetch;   // idx => waypoint ancora da avviare
+    $active    = [];         // (int)handle => idx
+    $handles   = [];         // (int)handle => handle
+    $lastStart = 0.0;
+    $mh        = curl_multi_init();
+
+    while ($queue || $active) {
+        $now = microtime(true);
+
+        // Avvia nuove richieste se c'è posto, è passato $spacing e c'è tempo
+        // per completarle prima della scadenza.
+        if ($queue && count($active) < $concurrency && $now - $lastStart >= $spacing) {
+            if ($deadline - $now < 3) {
+                $failed += $queue; // tempo finito: non partono più
+                $queue = [];
+            } else {
+                $idx = array_key_first($queue);
+                $wp  = $queue[$idx];
+                unset($queue[$idx]);
+                $ch = curl_init(OSPZ_API . '/search/zone');
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => json_encode([
+                        'points'        => [['lat' => $wp['lat'], 'lng' => $wp['lon']]],
+                        'radius'        => $radiusKm,
+                        'fuelType'      => $fuelId,
+                        'refuelingMode' => 'x',
+                        'priceOrder'    => 'asc',
+                    ]),
+                    CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'User-Agent: FuelFinder/1.0'],
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
+                    CURLOPT_CONNECTTIMEOUT => 5,
+                    CURLOPT_TIMEOUT        => (int)max(3, min(20, $deadline - $now)),
+                ]);
+                curl_multi_add_handle($mh, $ch);
+                $active[(int)$ch]  = $idx;
+                $handles[(int)$ch] = $ch;
+                $lastStart = $now;
+                continue;
+            }
         }
 
-        $running = null;
-        do {
-            curl_multi_exec($mh, $running);
-            if ($running) curl_multi_select($mh, 0.02);
-        } while ($running > 0);
+        if (!$active) { usleep(20000); continue; } // in attesa dello spacing
+        curl_multi_exec($mh, $running);
+        curl_multi_select($mh, 0.05);
 
-        for ($k = $pos; $k < $windowEnd; $k++) {
-            $idx  = $indices[$k];
-            $resp = curl_multi_getcontent($handles[$idx]);
-            $code = curl_getinfo($handles[$idx], CURLINFO_HTTP_CODE);
-            curl_multi_remove_handle($mh, $handles[$idx]);
-            curl_close($handles[$idx]);
+        while ($info = curl_multi_info_read($mh)) {
+            $ch   = $info['handle'];
+            $idx  = $active[(int)$ch];
+            unset($active[(int)$ch], $handles[(int)$ch]);
+            $resp = curl_multi_getcontent($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $secs = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
+            $cerr = curl_error($ch);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+
+            $data = ($resp && $code === 200) ? json_decode($resp, true) : null;
+            if (!is_array($data)) {
+                error_log(sprintf('OSPZ route zone FAIL code=%d t=%.1fs err=%s', $code, $secs, $cerr ?: '-'));
+                // Niente cache su errore: un 429 non deve avvelenare la cache
+                // con risultati vuoti per tutto il TTL.
+                $failed[$idx] = $toFetch[$idx];
+                continue;
+            }
 
             $wpResult = [];
-            $okResp   = false;
+            foreach (($data['results'] ?? []) as $item) {
+                if (!is_array($item['fuels'] ?? null) || !is_array($item['location'] ?? null)) continue;
+                $brand = trim($item['brand'] ?? $item['name'] ?? '');
 
-            if ($resp && $code === 200) {
-                $data = json_decode($resp, true);
-                if (is_array($data)) {
-                    $okResp = true;
-                    foreach (($data['results'] ?? []) as $item) {
-                        if (!is_array($item['fuels'] ?? null) || !is_array($item['location'] ?? null)) continue;
-                        $brand = trim($item['brand'] ?? $item['name'] ?? '');
-
-                        $prezzo = null; $isSelf = false;
-                        foreach ($item['fuels'] as $fuel) {
-                            if ((int)($fuel['fuelId'] ?? 0) !== $fuelIdInt) continue;
-                            if ($prezzo === null || (!$isSelf && (bool)($fuel['isSelf'] ?? false))) {
-                                $prezzo = (float)$fuel['price'];
-                                $isSelf = (bool)($fuel['isSelf'] ?? false);
-                            }
-                        }
-                        if ($prezzo === null || $prezzo <= 0) continue;
-
-                        $insertDate = $item['insertDate'] ?? '';
-                        if ($insertDate) {
-                            $ts = strtotime($insertDate);
-                            if ($ts && (time() - $ts) > 86400 * 3) continue;
-                        }
-
-                        $impId = (int)($item['id'] ?? 0);
-                        if ($impId && isset($anagrafica[$impId])) {
-                            $name = $anagrafica[$impId]['nome'];
-                            $addr = $anagrafica[$impId]['addr'];
-                        } else {
-                            $name = $item['name'] ?? $brand;
-                            $addr = !empty($item['address']) ? $item['address'] : 'Vedi mappa';
-                        }
-
-                        $sid = $impId ? (string)$impId
-                            : ((float)($item['location']['lat'] ?? 0)) . '_' . ((float)($item['location']['lng'] ?? 0));
-
-                        $station = [
-                            'id'      => $sid,
-                            'brand'   => $brand,
-                            'name'    => $name,
-                            'addr'    => $addr,
-                            'lat'     => (float)($item['location']['lat'] ?? 0),
-                            'lon'     => (float)($item['location']['lng'] ?? 0),
-                            'price'   => $prezzo,
-                            'fuelType'=> $fuelType,
-                            'insDate' => $insertDate,
-                            'country' => 'IT',
-                        ];
-
-                        $wpResult[$sid] = $station;
-                        if (!isset($all[$sid])) $all[$sid] = $station;
+                $prezzo = null; $isSelf = false;
+                foreach ($item['fuels'] as $fuel) {
+                    if ((int)($fuel['fuelId'] ?? 0) !== $fuelIdInt) continue;
+                    if ($prezzo === null || (!$isSelf && (bool)($fuel['isSelf'] ?? false))) {
+                        $prezzo = (float)$fuel['price'];
+                        $isSelf = (bool)($fuel['isSelf'] ?? false);
                     }
                 }
-            }
+                if ($prezzo === null || $prezzo <= 0) continue;
 
-            // Cache solo su risposta valida: un errore upstream non deve
-            // avvelenare la cache con risultati vuoti per tutto il TTL.
-            if ($okResp) {
-                $wp  = $toFetch[$idx];
-                $key = sprintf('rpt_%.3f_%.3f_%.0f_%s',
-                    round($wp['lat'], 3), round($wp['lon'], 3), $radiusKm, $fuelType);
-                cacheSet($namespace, $key, $wpResult);
+                $insertDate = $item['insertDate'] ?? '';
+                if ($insertDate) {
+                    $ts = strtotime($insertDate);
+                    if ($ts && (time() - $ts) > 86400 * 3) continue;
+                }
+
+                $impId = (int)($item['id'] ?? 0);
+                // Coordinate segnaposto: km lungo percorso e deviazione inventati.
+                if ($impId && !empty($anagrafica[$impId]['bad_coord'])) continue;
+
+                if ($impId && isset($anagrafica[$impId])) {
+                    $name = $anagrafica[$impId]['nome'];
+                    $addr = $anagrafica[$impId]['addr'];
+                } else {
+                    $name = $item['name'] ?? $brand;
+                    $addr = !empty($item['address']) ? $item['address'] : 'Vedi mappa';
+                }
+
+                $sid = $impId ? (string)$impId
+                    : ((float)($item['location']['lat'] ?? 0)) . '_' . ((float)($item['location']['lng'] ?? 0));
+
+                $station = [
+                    'id'      => $sid,
+                    'brand'   => $brand,
+                    'name'    => $name,
+                    'addr'    => $addr,
+                    'lat'     => (float)($item['location']['lat'] ?? 0),
+                    'lon'     => (float)($item['location']['lng'] ?? 0),
+                    'price'   => $prezzo,
+                    'fuelType'=> $fuelType,
+                    'insDate' => $insertDate,
+                    'country' => 'IT',
+                ];
+
+                $wpResult[$sid] = $station;
+                if (!isset($all[$sid])) $all[$sid] = $station;
             }
+            cacheSet('routepts', routePointCacheKey($toFetch[$idx], $radiusKm, $fuelType), $wpResult);
         }
-
-        $pos = $windowEnd;
     }
 
     curl_multi_close($mh);
-    return array_values($all);
+    return $failed;
 }
 
 function routeSearchTK(array $waypoints, float $radiusKm, string $fuelType): array {

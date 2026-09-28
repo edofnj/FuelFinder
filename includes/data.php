@@ -66,7 +66,7 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
         'costing' => 'auto',
         'units'   => 'kilometers',
     ]);
-    $ch = curl_init('http://valhalla:8002/sources_to_targets');
+    $ch = curl_init(VALHALLA_URL . '/sources_to_targets');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
@@ -188,9 +188,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['calc']) || $isSOS)) 
     if (!empty($results)) {
         usort($results, fn($a,$b) => $a['distanza'] <=> $b['distanza']);
 
-        // Cap: max 40 stazioni passate a OSRM (le più vicine in linea d'aria).
-        // Evita chiamate inutili quando la zona è super densa (Monaco, Milano).
-        if (count($results) > 40) $results = array_slice($results, 0, 40);
+        // Cap per la matrice distanze nelle zone super dense (Monaco, Milano):
+        // le 40 più vicine + le 40 più economiche tra le restanti. Tenere solo
+        // le più vicine riduceva di fatto il raggio (10 km → ~7 km) e scartava
+        // proprio i distributori lontani ma convenienti.
+        if (count($results) > 40) {
+            $rest = array_filter(array_slice($results, 40), fn($r) => $r['distanza'] <= $uRaggio);
+            usort($rest, fn($a, $b) => $a['prezzo'] <=> $b['prezzo']);
+            $results = array_merge(array_slice($results, 0, 40), array_slice($rest, 0, 40));
+        }
 
         // Distanze reali su strada su tutti i risultati (anche in SOS).
         applyRoadDistances($uLat, $uLon, $results, 20, $uRaggio);

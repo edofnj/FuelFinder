@@ -25,6 +25,8 @@ $routeResult   = null;
 $routeStations = [];
 $routeError    = null;
 $hasResults    = false;
+$routeFailedWps = 0;     // zone del percorso non interrogate (rate limit MIMIT)
+$routeThinned   = false; // percorso lungo campionato a intervalli
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
     $fromLat    = (float)$valFromLat;
@@ -48,11 +50,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
         } else {
             $routeResult  = $osrmRoute;
             $coords       = $osrmRoute['coords'];
-            $searchRadius = max($corridorKm / 2.0 + 3.0, 8.0);
-            $waypoints    = sampleRouteWaypoints($coords, 8.0);
+            // Passo tra i waypoint: il più ampio che con cerchi di raggio
+            // $searchRadius copre ancora tutto il corridoio (semi-larghezza $half).
+            // Meno waypoint = meno richieste MIMIT = meno 429 dal rate limit.
+            // Il MIMIT tronca comunque a 10 km (MIMIT_MAX_RADIUS): raggio pieno,
+            // così il passo è il più lungo possibile.
+            $half         = $corridorKm / 2.0 + 0.5;
+            $searchRadius = (float)MIMIT_MAX_RADIUS;
+            $stepKm       = 2.0 * sqrt($searchRadius ** 2 - $half ** 2);
+            // Con "Cerca nelle prime X km" si interroga solo quel tratto.
+            $waypoints    = sampleRouteWaypoints($maxKm > 0 ? routeHead($coords, $maxKm + $half) : $coords, $stepKm);
 
-            if (count($waypoints) > 60) {
-                $step = (int)ceil(count($waypoints) / 60);
+            // Percorsi molto lunghi: oltre 40 zone la ricerca diventa troppo
+            // lenta (MIMIT risponde in 1-10 s) e urta il rate limit. Si
+            // campiona a intervalli, avvisando che la copertura è ridotta.
+            $routeThinned = count($waypoints) > 40;
+            if ($routeThinned) {
+                $step = (int)ceil(count($waypoints) / 40);
                 $tmp  = [];
                 foreach ($waypoints as $k => $wp) { if ($k % $step === 0) $tmp[] = $wp; }
                 $waypoints = $tmp;
@@ -65,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
             }
 
             $rawStations = [];
-            if (!empty($itWps)) $rawStations = array_merge($rawStations, routeSearchMimit($itWps, $searchRadius, $fuelType));
+            if (!empty($itWps)) $rawStations = array_merge($rawStations, routeSearchMimit($itWps, $searchRadius, $fuelType, $routeFailedWps));
             if (!empty($deWps)) $rawStations = array_merge($rawStations, routeSearchTK($deWps, min($searchRadius, 25.0), $fuelType));
 
             $processed = [];
@@ -163,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="stylesheet" href="/fonts/fonts.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 <link rel="stylesheet" href="/libs/leaflet/leaflet.css">
 </head>
 <body>
@@ -308,6 +322,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
             </div>
             <?php endif; ?>
 
+            <?php if ($routeFailedWps > 0 || $routeThinned): ?>
+            <div class="route-error-box">
+                <span>&#9888;</span> <?= htmlspecialchars(t($routeFailedWps > 0 ? 'route_warn_partial' : 'route_warn_long')) ?>
+            </div>
+            <?php endif; ?>
+
             <?php if ($routeResult): ?>
             <div class="route-meta">
                 <span class="route-meta-item">
@@ -417,6 +437,6 @@ window.FF_CSRF       = <?= json_encode(csrfToken()) ?>;
 </script>
 <?php include __DIR__ . '/includes/cookie_banner.php'; ?>
 <script src="/libs/leaflet/leaflet.js"></script>
-<script src="js/route.js"></script>
+<script src="js/route.js?v=<?= filemtime(__DIR__ . '/js/route.js') ?>"></script>
 </body>
 </html>

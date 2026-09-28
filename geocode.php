@@ -48,4 +48,14 @@ if ($resp && $code === 200) {
         ];
     }
 }
-echo json_encode($out);
+// Se la query nomina il comune ("Piazza Duomo, Milano") i risultati di quel
+// comune vanno in cima: Geoapify privilegia la corrispondenza sul nome della
+// via e proponeva prima Pavia, Bergamo e Crema. Ordinamento stabile.
+$qLow = mb_strtolower($q);
+$rank = [];
+foreach ($out as $i => $item) {
+    $city = mb_strtolower((string)($item['address']['city'] ?? ''));
+    $rank[$i] = ($city !== '' && mb_strpos($qLow, $city) !== false) ? 0 : 1;
+}
+uksort($out, fn($a, $b) => [$rank[$a], $a] <=> [$rank[$b], $b]);
+echo json_encode(array_values($out));

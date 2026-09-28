@@ -12,7 +12,12 @@ ErrorDocument 500 /500.php
 </FilesMatch>
 
 # Blocca estensioni sensibili ovunque
-<FilesMatch "\.(bak|log|sql|ser|ini|conf|old|swp|tmp|md|lock|download)$">
+<FilesMatch "\.(bak|log|sql|ser|ini|conf|old|swp|tmp|md|lock|download|yml|yaml)$">
+    Require all denied
+</FilesMatch>
+
+# File di build/deploy (non devono essere scaricabili)
+<FilesMatch "^(Dockerfile|docker-compose.*)$">
     Require all denied
 </FilesMatch>
 

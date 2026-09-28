@@ -96,28 +96,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calc_route'])) {
             if (empty($processed)) {
                 $routeError = t('route_err_nostations');
             } else {
-                // Reference: cheapest on-route station. If none, cheapest overall.
-                $onRouteStations = array_values(array_filter($processed, fn($s) => $s['detour_km'] <= 0.1));
-                $hasOnRoute = !empty($onRouteStations);
-                $refPrice = $hasOnRoute
-                    ? min(array_map(fn($s) => $s['price'], $onRouteStations))
-                    : min(array_map(fn($s) => $s['price'], $processed));
+                // Costo effettivo (prezzo + carburante della deviazione su 50 L):
+                // è il criterio della classifica.
+                foreach ($processed as &$s) {
+                    $s['effective_price'] = $s['price'] + ($s['detour_km'] * $consumo / 100.0 * $s['price']) / 50.0;
+                }
+                unset($s);
+
+                // Riferimento = dove ti fermeresti comunque: i distributori sul
+                // percorso o, se non ce ne sono, quelli con la deviazione più
+                // breve; tra questi il più conveniente. Gli altri vengono
+                // confrontati con lui sulla deviazione IN PIÙ. Prima, senza
+                // distributori sul percorso, il riferimento era il prezzo più
+                // basso in assoluto a prescindere dalla deviazione: il primo in
+                // classifica poteva risultare "Non conveniente".
+                $minDetour  = min(array_map(fn($s) => $s['detour_km'], $processed));
+                $hasOnRoute = $minDetour <= 0.1;
+                $baseLimit  = $hasOnRoute ? 0.1 : $minDetour + 0.1;
+                $baseline   = array_filter($processed, fn($s) => $s['detour_km'] <= $baseLimit);
+                usort($baseline, fn($a, $b) => $a['effective_price'] <=> $b['effective_price']);
+                $ref = $baseline[0];
 
                 foreach ($processed as &$s) {
-                    $detour     = $s['detour_km'];
-                    $detourFuel = $detour * $consumo / 100.0;
-                    $priceDiff  = $refPrice - $s['price'];  // >0 = this station cheaper than reference
+                    $priceDiff = $ref['price'] - $s['price'];  // >0 = più economico del riferimento
+                    $extraFuel = max(0.0, $s['detour_km'] - $ref['detour_km']) * $consumo / 100.0;
 
-                    if ($detour <= 0.1) {
-                        $s['break_even'] = 0;
-                    } elseif (!$hasOnRoute && abs($priceDiff) <= 0.0001) {
-                        $s['break_even'] = -1;  // cheapest available, no on-route reference
+                    if ($s['detour_km'] <= 0.1) {
+                        $s['break_even'] = 0;   // sul percorso
+                    } elseif ($s['detour_km'] <= $baseLimit && $priceDiff >= -0.0001) {
+                        $s['break_even'] = -1;  // deviazione più breve disponibile
                     } elseif ($priceDiff <= 0.0001) {
-                        $s['break_even'] = null;  // off-route AND not cheaper than on-route ref
+                        $s['break_even'] = null; // più lontano e non più economico
                     } else {
-                        $s['break_even'] = (int)ceil(($detourFuel * $s['price']) / $priceDiff);
+                        $s['break_even'] = max(1, (int)ceil(($extraFuel * $s['price']) / $priceDiff));
                     }
-                    $s['effective_price'] = $s['price'] + ($detourFuel * $s['price']) / 50.0;
                 }
                 unset($s);
 

@@ -131,7 +131,7 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
 }
 
 function getRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = []): ?array {
-    // Valhalla self-hostato gestisce sia il percorso base sia evita pedaggi/autostrade.
+    // Valhalla gestisce sia il percorso base sia evita pedaggi/autostrade.
     // (getOsrmRoute resta definita ma non più usata: niente dipendenza dal demo OSRM.)
     return getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, $exclude);
 }

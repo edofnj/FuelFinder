@@ -16,9 +16,10 @@ if ($envKey !== false && $envKey !== '') {
     define('TANKERKOENIG_KEY', '');
 }
 
-// Valhalla self-hostato (container nella rete docker). Sovrascrivibile da env o
-// config.local.php per lo sviluppo locale, dove il container non è raggiungibile.
-if (!defined('VALHALLA_URL')) define('VALHALLA_URL', getenv('VALHALLA_URL') ?: 'http://valhalla:8002');
+// Valhalla pubblico FOSSGIS (fair use, max 150 km per coppia nella matrice).
+// Il container self-hostato (http://valhalla:8002) è stato fermato per risparmiare
+// ~2 GB di RAM. Sovrascrivibile da env o config.local.php.
+if (!defined('VALHALLA_URL')) define('VALHALLA_URL', getenv('VALHALLA_URL') ?: 'https://valhalla1.openstreetmap.de');
 
 // Bootstrap DB + metriche + auth (connessione DB lazy, sessione no-op in CLI).
 require_once __DIR__ . '/db.php';

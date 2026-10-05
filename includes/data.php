@@ -35,7 +35,9 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
         // Pre-filtro: se linea d'aria > raggio * 1.8, salta OSRM (improbabile dentro raggio strada)
         if ($uRaggio !== null) {
             $airDist = getDistance($uLat, $uLon, $results[$i]['lat'], $results[$i]['lon']);
-            if ($airDist > $uRaggio * 1.8) {
+            // Il Valhalla pubblico FOSSGIS rifiuta l'INTERA matrice se una coppia supera
+            // 150 km di strada: oltre ~110 km in linea d'aria resta la distanza in linea d'aria.
+            if ($airDist > $uRaggio * 1.8 || $airDist > 110) {
                 $results[$i]['distanza'] = round($airDist, 2); // resta linea d'aria, filtro raggio la eliminerà
                 continue;
             }
@@ -51,7 +53,7 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
     }
     if (empty($toFetch)) return;
 
-    // Fase 2: UNICA chiamata matrice a Valhalla self-hostato (/sources_to_targets)
+    // Fase 2: UNICA chiamata matrice a Valhalla (/sources_to_targets)
     // sui soli miss. 1 sorgente (utente) -> N destinazioni (distributori).
     $targets  = [];
     $idxByPos = []; // posizione nella matrice => indice in $results
@@ -74,6 +76,7 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
         CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
         CURLOPT_TIMEOUT        => 15,
         CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_USERAGENT      => 'FuelFinder/1.0',
     ]);
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);

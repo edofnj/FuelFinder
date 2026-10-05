@@ -20,6 +20,8 @@ if ($envKey !== false && $envKey !== '') {
 // Il container self-hostato (http://valhalla:8002) è stato fermato per risparmiare
 // ~2 GB di RAM. Sovrascrivibile da env o config.local.php.
 if (!defined('VALHALLA_URL')) define('VALHALLA_URL', getenv('VALHALLA_URL') ?: 'https://valhalla1.openstreetmap.de');
+// OSRM FOSSGIS: ripiego per distanze (coppie > 150 km) e percorsi quando Valhalla non risponde.
+if (!defined('OSRM_URL')) define('OSRM_URL', getenv('OSRM_URL') ?: 'https://routing.openstreetmap.de/routed-car');
 
 // Bootstrap DB + metriche + auth (connessione DB lazy, sessione no-op in CLI).
 require_once __DIR__ . '/db.php';

@@ -38,7 +38,7 @@ function getOsrmRoute($fromLat, $fromLon, $toLat, $toLon): ?array {
     $cached = cacheGet('route', $cacheKey, 2592000);
     if ($cached !== null) return $cached;
 
-    $url = 'https://router.project-osrm.org/route/v1/driving/'
+    $url = OSRM_URL . '/route/v1/driving/'
          . $fromLon . ',' . $fromLat . ';'
          . $toLon   . ',' . $toLat
          . '?overview=full&geometries=geojson&alternatives=false&steps=false';
@@ -132,8 +132,13 @@ function getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = [
 
 function getRoute($fromLat, $fromLon, $toLat, $toLon, array $exclude = []): ?array {
     // Valhalla gestisce sia il percorso base sia evita pedaggi/autostrade.
-    // (getOsrmRoute resta definita ma non più usata: niente dipendenza dal demo OSRM.)
-    return getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, $exclude);
+    // Se non risponde si ripiega su OSRM FOSSGIS, ma solo senza esclusioni:
+    // i server OSRM pubblici non supportano exclude=toll/motorway.
+    $route = getValhallaRoute($fromLat, $fromLon, $toLat, $toLon, $exclude);
+    if ($route === null && empty($exclude)) {
+        $route = getOsrmRoute($fromLat, $fromLon, $toLat, $toLon);
+    }
+    return $route;
 }
 
 function sampleRouteWaypoints(array $coords, float $stepKm = 8.0): array {

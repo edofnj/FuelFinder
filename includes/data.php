@@ -35,9 +35,7 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
         // Pre-filtro: se linea d'aria > raggio * 1.8, salta OSRM (improbabile dentro raggio strada)
         if ($uRaggio !== null) {
             $airDist = getDistance($uLat, $uLon, $results[$i]['lat'], $results[$i]['lon']);
-            // Il Valhalla pubblico FOSSGIS rifiuta l'INTERA matrice se una coppia supera
-            // 150 km di strada: oltre ~110 km in linea d'aria resta la distanza in linea d'aria.
-            if ($airDist > $uRaggio * 1.8 || $airDist > 110) {
+            if ($airDist > $uRaggio * 1.8) {
                 $results[$i]['distanza'] = round($airDist, 2); // resta linea d'aria, filtro raggio la eliminerà
                 continue;
             }
@@ -53,18 +51,43 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
     }
     if (empty($toFetch)) return;
 
-    // Fase 2: UNICA chiamata matrice a Valhalla (/sources_to_targets)
-    // sui soli miss. 1 sorgente (utente) -> N destinazioni (distributori).
-    $targets  = [];
-    $idxByPos = []; // posizione nella matrice => indice in $results
+    // Fase 2: matrice 1 sorgente (utente) -> N distributori, solo sui miss di cache.
+    // Prima Valhalla FOSSGIS, che però rifiuta l'INTERA richiesta se una coppia supera
+    // 150 km di strada: a lui vanno solo i distributori entro ~110 km in linea d'aria.
+    // I più lontani e quelli che Valhalla non ha risolto passano alla tabella OSRM
+    // FOSSGIS (nessun limite di distanza). La linea d'aria resta solo se falliscono entrambi.
+    $near = $far = [];
     foreach ($toFetch as $i => $key) {
-        $idxByPos[] = $i;
-        $targets[]  = ['lat' => $results[$i]['lat'], 'lon' => $results[$i]['lon']];
+        $air = getDistance($uLat, $uLon, $results[$i]['lat'], $results[$i]['lon']);
+        if ($air <= 110) $near[] = $i; else $far[] = $i;
     }
 
+    $resolved = [];
+    if ($near) {
+        $resolved = valhallaMatrixKm($uLat, $uLon, array_map(fn($i) => $results[$i], $near));
+        $resolved = array_combine($near, $resolved);
+    }
+    $missing = array_merge($far, array_keys(array_filter($resolved, fn($km) => $km === null)));
+    if ($missing) {
+        $osrm = osrmTableKm($uLat, $uLon, array_map(fn($i) => $results[$i], $missing));
+        foreach ($missing as $pos => $i) $resolved[$i] = $osrm[$pos];
+    }
+
+    foreach ($resolved as $i => $km) {
+        if ($km === null) continue;
+        $results[$i]['distanza'] = $km;
+        $results[$i]['road_ok']  = true;
+        cacheSet('osrm', $toFetch[$i], $km);
+    }
+}
+
+// Distanze su strada (km) dall'utente verso $targets via Valhalla /sources_to_targets.
+// Ritorna un array allineato a $targets: km, oppure null se non disponibile.
+function valhallaMatrixKm($uLat, $uLon, array $targets): array {
+    $out = array_fill(0, count($targets), null);
     $payload = json_encode([
         'sources' => [['lat' => $uLat, 'lon' => $uLon]],
-        'targets' => $targets,
+        'targets' => array_map(fn($t) => ['lat' => $t['lat'], 'lon' => $t['lon']], $targets),
         'costing' => 'auto',
         'units'   => 'kilometers',
     ]);
@@ -81,23 +104,48 @@ function applyRoadDistances($uLat, $uLon, &$results, $concurrency = 20, $uRaggio
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+    if (!$resp || $code !== 200) return $out;
 
-    if ($resp && $code === 200) {
-        $data = json_decode($resp, true);
-        $row  = is_array($data) ? ($data['sources_to_targets'][0] ?? []) : [];
-        if (!is_array($row)) $row = [];
-        foreach ($row as $pos => $cell) {
-            if (!isset($idxByPos[$pos])) continue;
-            $i    = $idxByPos[$pos];
-            $dist = $cell['distance'] ?? null; // km (units=kilometers)
-            if ($dist !== null && $dist > 0) {
-                $km = round((float)$dist, 2);
-                $results[$i]['distanza'] = $km;
-                $results[$i]['road_ok']  = true;
-                cacheSet('osrm', $toFetch[$i], $km);
-            }
+    $data = json_decode($resp, true);
+    $row  = is_array($data) ? ($data['sources_to_targets'][0] ?? []) : [];
+    if (!is_array($row)) return $out;
+    foreach ($row as $pos => $cell) {
+        $dist = $cell['distance'] ?? null; // km (units=kilometers)
+        if (array_key_exists($pos, $out) && $dist !== null && $dist > 0) {
+            $out[$pos] = round((float)$dist, 2);
         }
     }
+    return $out;
+}
+
+// Come valhallaMatrixKm ma via tabella OSRM FOSSGIS (GET /table, distanze in metri).
+function osrmTableKm($uLat, $uLon, array $targets): array {
+    $out = array_fill(0, count($targets), null);
+    $coords = [sprintf('%.6f,%.6f', $uLon, $uLat)];
+    foreach ($targets as $t) $coords[] = sprintf('%.6f,%.6f', $t['lon'], $t['lat']);
+    $url = OSRM_URL . '/table/v1/driving/' . implode(';', $coords)
+         . '?sources=0&annotations=distance';
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_USERAGENT      => 'FuelFinder/1.0',
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!$resp || $code !== 200) return $out;
+
+    $data = json_decode($resp, true);
+    $row  = is_array($data) && ($data['code'] ?? '') === 'Ok' ? ($data['distances'][0] ?? []) : [];
+    if (!is_array($row)) return $out;
+    foreach ($out as $pos => $_) {
+        $m = $row[$pos + 1] ?? null; // colonna 0 = l'utente stesso
+        if ($m !== null && $m > 0) $out[$pos] = round($m / 1000, 2);
+    }
+    return $out;
 }
 
 function searchCacheKey($uLat, $uLon, $raggio, $fuel) {

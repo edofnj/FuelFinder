@@ -121,7 +121,8 @@ function login($email, $password, $remember = false) {
     if (!validEmail($email)) return [false, 'invalid'];
     if (rateLimited())       return [false, 'rate_limited'];
     try {
-        $st = pdo()->prepare('SELECT id, password_hash, email_verified::int AS email_verified FROM users WHERE lower(email) = lower(:e)');
+        // Gli account collegati all'account unico entrano solo da lì (niente password locale, 2FA inclusa)
+        $st = pdo()->prepare('SELECT id, password_hash, email_verified::int AS email_verified FROM users WHERE lower(email) = lower(:e) AND zitadel_sub IS NULL');
         $st->execute([':e' => $email]);
         $u = $st->fetch();
     } catch (Throwable $e) { return [false, 'db_error']; }
@@ -255,7 +256,8 @@ function verifyEmailToken($token) {
 function createPasswordReset($email) {
     // Non rivela mai se l'email esiste (anti-enumeration): ritorna sempre true.
     try {
-        $st = pdo()->prepare('SELECT id FROM users WHERE lower(email)=lower(:e)');
+        // Niente reset locale per gli account collegati all'account unico: la password si gestisce lì
+        $st = pdo()->prepare('SELECT id FROM users WHERE lower(email)=lower(:e) AND zitadel_sub IS NULL');
         $st->execute([':e' => trim((string)$email)]);
         $uid = $st->fetchColumn();
         if (!$uid) return true;
@@ -277,7 +279,8 @@ function createPasswordReset($email) {
 function resetPasswordWithToken($token, $newPw) {
     if (!is_string($newPw) || strlen($newPw) < 8) return [false, 'password_short'];
     try {
-        $st = pdo()->prepare('SELECT user_id FROM password_resets WHERE token_hash=:h AND expires_at > now()');
+        $st = pdo()->prepare('SELECT r.user_id FROM password_resets r JOIN users u ON u.id = r.user_id
+                              WHERE r.token_hash=:h AND r.expires_at > now() AND u.zitadel_sub IS NULL');
         $st->execute([':h' => hash('sha256', (string)$token)]);
         $uid = $st->fetchColumn();
         if (!$uid) return [false, 'invalid'];

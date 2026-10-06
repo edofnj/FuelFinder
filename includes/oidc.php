@@ -72,9 +72,13 @@ function oidcDiscovery() {
 
 function b64url($bin) { return rtrim(strtr(base64_encode($bin), '+/', '-_'), '='); }
 
+// Solo percorsi locali: niente schema/host, niente // iniziale, backslash o caratteri di controllo
+// (i browser scartano tab e a capo: "/\t/sito" diventerebbe "//sito").
 function safeNext($next) {
-    $next = is_string($next) ? $next : '/';
-    if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0 || strpos($next, '\\') !== false) return '/';
+    if (!is_string($next) || $next === '' || $next[0] !== '/') return '/';
+    if (preg_match('/[\x00-\x1F\x7F\\\\]/', $next) || strpos($next, '//') === 0) return '/';
+    $u = parse_url($next);
+    if ($u === false || isset($u['scheme']) || isset($u['host']) || isset($u['user'])) return '/';
     return $next;
 }
 

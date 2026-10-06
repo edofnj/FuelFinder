@@ -23,7 +23,6 @@ function fmtDate($ts, $de) {
     $t = strtotime($ts);
     return $t ? date($de ? 'd.m.Y H:i' : 'd/m/Y H:i', $t) : '—';
 }
-$linked = (int)($user['linked'] ?? 0) === 1;
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars($lang) ?>">
@@ -96,13 +95,8 @@ button,.btn-primary,.btn-line{font-family:inherit;cursor:pointer;border-radius:1
     <div class="card">
         <h2><?= L('Account fmenegazzi','fmenegazzi-Konto',$de) ?></h2>
         <div class="kv"><span class="k">Email</span><span class="v mono"><?= htmlspecialchars($user['email']) ?></span></div>
-        <?php if ($linked): ?>
-            <p class="lead" style="margin-top:14px"><?= L('Profilo, email, password e verifica in due passaggi si gestiscono sul tuo account fmenegazzi, valido per tutti gli strumenti.','Profil, E-Mail, Passwort und Zwei-Faktor-Anmeldung verwaltest du in deinem fmenegazzi-Konto, gültig für alle Tools.',$de) ?></p>
-            <a class="btn-primary" href="<?= htmlspecialchars(ACCOUNT_PAGE_URL) ?>"><?= L('Gestisci il mio account','Mein Konto verwalten',$de) ?> &rarr;</a>
-        <?php else: ?>
-            <p class="notice" style="margin-top:14px"><?= L('Il tuo account FuelFinder non è ancora collegato all\'account unico fmenegazzi. Collegalo con la stessa email: garage e dati restano tuoi.','Dein FuelFinder-Konto ist noch nicht mit dem fmenegazzi-Konto verknüpft. Verknüpfe es mit derselben E-Mail: Garage und Daten bleiben erhalten.',$de) ?></p>
-            <a class="btn-primary" href="/oidc?start&amp;force=1&amp;next=%2Fprofile"><?= L('Collega ora','Jetzt verknüpfen',$de) ?></a>
-        <?php endif; ?>
+        <p class="lead" style="margin-top:14px"><?= L('Profilo, email, password e verifica in due passaggi si gestiscono sul tuo account fmenegazzi, valido per tutti gli strumenti.','Profil, E-Mail, Passwort und Zwei-Faktor-Anmeldung verwaltest du in deinem fmenegazzi-Konto, gültig für alle Tools.',$de) ?></p>
+        <a class="btn-primary" href="<?= htmlspecialchars(ACCOUNT_PAGE_URL) ?>"><?= L('Gestisci il mio account','Mein Konto verwalten',$de) ?> &rarr;</a>
     </div>
 
     <div class="card">

@@ -144,8 +144,6 @@ function oidcLinkOrCreate($sub, $email, $emailVerified) {
             $db->prepare('UPDATE users SET zitadel_sub = :s, password_hash = NULL, email_verified = true, verify_token = NULL,
                           verify_expires = NULL, session_version = session_version + 1 WHERE id = :id')
                ->execute([':s' => $sub, ':id' => $id]);
-            $db->prepare('DELETE FROM auth_tokens WHERE user_id = :id')->execute([':id' => $id]);
-            $db->prepare('DELETE FROM password_resets WHERE user_id = :id')->execute([':id' => $id]);
         } else {
             $isAdmin = strtolower($email) === strtolower(ADMIN_EMAIL);
             $st = $db->prepare('INSERT INTO users (email, password_hash, zitadel_sub, email_verified, is_admin)

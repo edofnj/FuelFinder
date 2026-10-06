@@ -49,7 +49,7 @@ Kontakt für Datenschutzanfragen: <a href="mailto:edoardo@fmenegazzi.it">edoardo
 <h2>2. Welche Daten wir verarbeiten</h2>
 <table>
 <tr><th>Daten</th><th>Zweck</th><th>Rechtsgrundlage</th></tr>
-<tr><td>Konto: E-Mail, Passwort (gehasht), Registrierungs-/Login-Datum</td><td>Konto erstellen und verwalten</td><td>Art. 6 Abs. 1 b DSGVO (Vertrag)</td></tr>
+<tr><td>Konto: E-Mail, Kennung des fmenegazzi-Kontos, Registrierungs-/Login-Datum (das Passwort verwaltet das fmenegazzi-Konto auf account.fmenegazzi.it, nicht FuelFinder)</td><td>Konto erstellen und verwalten</td><td>Art. 6 Abs. 1 b DSGVO (Vertrag)</td></tr>
 <tr><td>Garage: Fahrzeuge (Name, Kraftstoff, Verbrauch)</td><td>Funktion „Garage“</td><td>Art. 6 Abs. 1 b DSGVO</td></tr>
 <tr><td>Anonyme Nutzungsstatistik (anonymer Tages-Hash – <b>keine rohe IP</b>, Seite, Ereignistyp, Gerät/Browser/OS, Referrer)</td><td>Aggregierte Statistik, Verbesserung des Dienstes</td><td>Art. 6 Abs. 1 f DSGVO (berechtigtes Interesse); keine Profilbildung</td></tr>
 <tr><td>Standort (GPS/Adresse)</td><td>Suche von Tankstellen – nur in Echtzeit, <b>nicht gespeichert</b></td><td>Art. 6 Abs. 1 b/a DSGVO</td></tr>
@@ -59,7 +59,7 @@ Kontakt für Datenschutzanfragen: <a href="mailto:edoardo@fmenegazzi.it">edoardo
 <p>Wir verwenden ausschließlich technisch notwendige bzw. funktionale Cookies. <b>Keine Werbe- oder Profiling-Cookies.</b> Unsere Statistik ist anonym und benötigt kein Cookie.</p>
 <ul>
 <li><code>ff_sess</code> — Sitzungscookie (Login), notwendig.</li>
-<li><code>ff_remember</code> — nur wenn Sie „Angemeldet bleiben“ wählen, funktional.</li>
+<li><code>fm_sso</code> — merkt sich, dass Sie im fmenegazzi-Konto angemeldet sind (gilt für alle Tools von fmenegazzi.it), funktional.</li>
 <li>Sprach-Cookie — speichert die gewählte Sprache, funktional.</li>
 <li>localStorage — Einstellungen / aktives Fahrzeug, technisch.</li>
 </ul>
@@ -68,7 +68,7 @@ Kontakt für Datenschutzanfragen: <a href="mailto:edoardo@fmenegazzi.it">edoardo
 <p>Zur Bereitstellung des Dienstes wird Ihre IP-Adresse technisch an folgende Dienste übermittelt: MIMIT/OSPZ (Preise IT), Tankerkönig (Preise DE), Geoapify (Adress-Autocomplete und Kartenkacheln; Daten &copy; OpenStreetMap), jsDelivr/unpkg (Bibliotheken). Routing und Schriftarten laufen auf unseren Servern (keine Übermittlung an Dritte). Es werden keine Daten zu Werbezwecken verkauft.</p>
 
 <h2>5. Speicherdauer</h2>
-<p>Kontodaten: bis zur Löschung des Kontos. Anonyme Statistik: aggregiert, ohne Personenbezug. Login-Versuche: kurzfristig (Sicherheit).</p>
+<p>Kontodaten: bis zur Löschung des Kontos. Anonyme Statistik: aggregiert, ohne Personenbezug.</p>
 
 <h2>6. Ihre Rechte</h2>
 <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch sowie auf Beschwerde bei einer Aufsichtsbehörde. Du kannst dein <b>Konto jederzeit selbst löschen</b> – im Bereich „Gefahrenzone“ auf der Seite <a href="/profile">Profil</a>: Die Löschung erfolgt sofort und unwiderruflich (Konto, Garage und zugehörige Daten). Für alle weiteren Anfragen schreibe an <a href="mailto:edoardo@fmenegazzi.it">edoardo@fmenegazzi.it</a>.</p>
@@ -84,7 +84,7 @@ Contatto per richieste privacy: <a href="mailto:edoardo@fmenegazzi.it">edoardo@f
 <h2>2. Quali dati trattiamo</h2>
 <table>
 <tr><th>Dato</th><th>Finalità</th><th>Base giuridica</th></tr>
-<tr><td>Account: email, password (in forma cifrata/hash), data registrazione e ultimo accesso</td><td>Creazione e gestione dell'account</td><td>art. 6.1.b GDPR (contratto/servizio)</td></tr>
+<tr><td>Account: email, identificativo dell'account fmenegazzi, data registrazione e ultimo accesso (la password è gestita dall'account fmenegazzi su account.fmenegazzi.it, non da FuelFinder)</td><td>Creazione e gestione dell'account</td><td>art. 6.1.b GDPR (contratto/servizio)</td></tr>
 <tr><td>Garage: veicoli salvati (nome, carburante, consumi)</td><td>Funzione “Garage”</td><td>art. 6.1.b GDPR</td></tr>
 <tr><td>Statistiche d'uso anonime (hash anonimo giornaliero — <b>nessun IP grezzo memorizzato</b>, pagina, tipo evento, tipo carburante/raggio/modalità/paese, dispositivo/browser/SO, referrer)</td><td>Statistiche aggregate e miglioramento del servizio</td><td>art. 6.1.f GDPR (legittimo interesse); nessuna profilazione</td></tr>
 <tr><td>Posizione (GPS/indirizzo)</td><td>Ricerca distributori — usata solo in tempo reale, <b>non memorizzata</b> dal sito</td><td>art. 6.1.b/a GDPR</td></tr>
@@ -94,7 +94,7 @@ Contatto per richieste privacy: <a href="mailto:edoardo@fmenegazzi.it">edoardo@f
 <p>Usiamo esclusivamente cookie tecnici necessari o funzionali. <b>Nessun cookie pubblicitario o di profilazione.</b> Le nostre statistiche sono anonime e non richiedono cookie.</p>
 <ul>
 <li><code>ff_sess</code> — cookie di sessione (login), necessario.</li>
-<li><code>ff_remember</code> — solo se scegli “Ricordami”, funzionale.</li>
+<li><code>fm_sso</code> — ricorda che hai fatto l'accesso con l'account fmenegazzi (vale per tutti gli strumenti di fmenegazzi.it), funzionale.</li>
 <li>cookie lingua — memorizza la lingua scelta, funzionale.</li>
 <li>localStorage — preferenze / veicolo attivo, tecnico.</li>
 </ul>
@@ -103,7 +103,7 @@ Contatto per richieste privacy: <a href="mailto:edoardo@fmenegazzi.it">edoardo@f
 <p>Per erogare il servizio, il tuo indirizzo IP viene tecnicamente trasmesso a: MIMIT/OSPZ (prezzi IT), Tankerkönig (prezzi DE), Geoapify (autocomplete indirizzi e tile della mappa; dati &copy; OpenStreetMap), jsDelivr/unpkg (librerie JS). Il calcolo dei percorsi e i font sono ospitati sui nostri server (nessun invio a terzi). Nessun dato è venduto o usato per finalità pubblicitarie.</p>
 
 <h2>5. Conservazione</h2>
-<p>Dati account: fino alla cancellazione dell'account. Statistiche anonime: in forma aggregata, senza riferimento alla persona. Tentativi di login: breve periodo (sicurezza).</p>
+<p>Dati account: fino alla cancellazione dell'account. Statistiche anonime: in forma aggregata, senza riferimento alla persona.</p>
 
 <h2>6. I tuoi diritti</h2>
 <p>Hai diritto di accesso, rettifica, cancellazione, limitazione, portabilità e opposizione, oltre al reclamo all'Autorità Garante. Puoi <b>cancellare il tuo account in autonomia</b>, in qualsiasi momento, dalla sezione “Zona pericolosa” della pagina <a href="/profile">Profilo</a>: l'eliminazione è immediata e irreversibile (account, garage e dati associati). Per ogni altra richiesta puoi scrivere a <a href="mailto:edoardo@fmenegazzi.it">edoardo@fmenegazzi.it</a>.</p>

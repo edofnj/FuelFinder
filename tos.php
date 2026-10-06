@@ -40,7 +40,7 @@ $updated = '25/06/2026';
 <h2>2. Keine Gewähr</h2>
 <p>Preise und Daten stammen von Dritten (MIMIT, Tankerkönig/MTS-K, OpenStreetMap) und können ungenau oder veraltet sein. Routen und Kostenschätzungen sind Näherungen. Der Dienst wird „wie besehen“ ohne Gewährleistung bereitgestellt; Entscheidungen auf Basis der Angaben treffen Sie auf eigenes Risiko.</p>
 <h2>3. Konten</h2>
-<p>Für das Speichern von Fahrzeugen ist ein Konto nötig. Du bist für die Geheimhaltung deines Passworts verantwortlich. Wir können Konten bei Missbrauch sperren. Du kannst dein Konto jederzeit selbst im Bereich „Gefahrenzone“ auf der Seite <a href="/profile">Profil</a> löschen – die Löschung erfolgt sofort und unwiderruflich.</p>
+<p>Für das Speichern von Fahrzeugen ist ein fmenegazzi-Konto nötig (dasselbe für alle Tools von fmenegazzi.it). Du bist für die Geheimhaltung deines Passworts verantwortlich. Wir können Konten bei Missbrauch sperren. Du kannst dein Konto jederzeit selbst im Bereich „Gefahrenzone“ auf der Seite <a href="/profile">Profil</a> löschen – die Löschung erfolgt sofort und unwiderruflich.</p>
 <h2>4. Zulässige Nutzung</h2>
 <p>Keine automatisierte Massenabfrage, kein Reverse-Engineering, keine Überlastung der Infrastruktur, keine rechtswidrige Nutzung.</p>
 <h2>5. Haftung</h2>
@@ -56,7 +56,7 @@ $updated = '25/06/2026';
 <h2>2. Assenza di garanzie</h2>
 <p>I prezzi e i dati provengono da terze parti (MIMIT, Tankerkönig/MTS-K, OpenStreetMap) e possono essere inesatti o non aggiornati. Percorsi e stime di costo sono approssimazioni. Il servizio è fornito “così com'è”, senza garanzie: le decisioni basate sulle informazioni mostrate sono a tuo rischio.</p>
 <h2>3. Account</h2>
-<p>Per salvare i veicoli serve un account. Sei responsabile della riservatezza della tua password. Possiamo sospendere account in caso di abuso. Puoi cancellare il tuo account in qualsiasi momento dalla sezione “Zona pericolosa” della pagina <a href="/profile">Profilo</a>: l'eliminazione è immediata e irreversibile.</p>
+<p>Per salvare i veicoli serve un account fmenegazzi (lo stesso per tutti gli strumenti di fmenegazzi.it). Sei responsabile della riservatezza della tua password. Possiamo sospendere account in caso di abuso. Puoi cancellare il tuo account in qualsiasi momento dalla sezione “Zona pericolosa” della pagina <a href="/profile">Profilo</a>: l'eliminazione è immediata e irreversibile.</p>
 <h2>4. Uso consentito</h2>
 <p>Vietati: interrogazioni massive automatizzate, reverse engineering, sovraccarico dell'infrastruttura, qualsiasi uso illecito.</p>
 <h2>5. Responsabilità</h2>

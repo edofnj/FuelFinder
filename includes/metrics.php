@@ -18,12 +18,6 @@ function visitorHash() {
     return substr(hash('sha256', $salt . '|' . clientIp() . '|' . $ua), 0, 32);
 }
 
-// Hash IP stabile (con segreto) solo per il rate-limit login. Non è PII leggibile.
-function ipHashForRate() {
-    $secret = getenv('METRICS_SALT') ?: 'ff-default-salt';
-    return substr(hash('sha256', 'rate|' . $secret . '|' . clientIp()), 0, 32);
-}
-
 function refererHost() {
     $r = $_SERVER['HTTP_REFERER'] ?? '';
     if ($r === '') return null;

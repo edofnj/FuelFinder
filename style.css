@@ -325,7 +325,15 @@ input[type="number"]{-moz-appearance:textfield}
 }
 
 /* ===== MENU STRUMENTI (fm-switcher, da www.fmenegazzi.it) ===== */
-.ff-switcher{margin-left:6px;z-index:1100}
+.ff-switcher{margin-left:6px;z-index:1100;
+    /* stesso stile dell'header e del menu account di FuelFinder */
+    --fm-sw-font:'Inter',system-ui,-apple-system,sans-serif;--fm-sw-mono:'JetBrains Mono',monospace;
+    --fm-sw-title-font:'JetBrains Mono',monospace;--fm-sw-title-size:.74rem;--fm-sw-title-weight:600;--fm-sw-title-transform:uppercase;--fm-sw-title-spacing:.06em;
+    --fm-sw-bg:#131c2e;--fm-sw-bg-hover:rgba(255,255,255,.06);--fm-sw-text:var(--text);--fm-sw-muted:var(--muted);--fm-sw-border:var(--glass-border);
+    --fm-sw-accent:var(--accent);--fm-sw-accent-text:var(--on-accent);
+    --fm-sw-radius:12px;--fm-sw-item-radius:8px;--fm-sw-button-radius:var(--radius);--fm-sw-shadow:0 12px 40px rgba(0,0,0,.5);
+    --fm-sw-trigger-bg:var(--glass);--fm-sw-trigger-border:var(--glass-border);--fm-sw-trigger-radius:100px;--fm-sw-blur:blur(10px);
+    --fm-sw-mark-bg:var(--accent);--fm-sw-mark-text:var(--on-accent)}
 @media(max-width:420px){.ff-switcher{margin-left:0}}
 
 /* ===== ACCOUNT WIDGET ===== */

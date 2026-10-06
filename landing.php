@@ -195,6 +195,6 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
         <span><?= L('Dati','Daten') ?>: MIMIT · <a href="https://creativecommons.tankerkoenig.de" target="_blank" rel="noopener">Tankerkönig</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span>
     </footer>
 </div>
-<script>function ffOpenAuth(t){location.href='/account?tab='+(t||'login');}</script>
+<script>function ffOpenAuth(t){location.href='/oidc?start'+(t==='register'?'&register=1':'');}</script>
 </body>
 </html>

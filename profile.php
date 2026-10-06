@@ -1,20 +1,15 @@
 <?php
 require_once __DIR__ . '/includes/config.php'; // bootstrap db/metrics/auth + sessione
 require_once __DIR__ . '/includes/i18n.php';
-
-// Pagina riservata: senza login si torna alla schermata di accesso.
+// "I miei dati FuelFinder": profilo, email, password e sicurezza sono sull'account unico fmenegazzi
+// (ACCOUNT_PAGE_URL); qui restano solo i dati del tool.
 if (!isLoggedIn()) { header('Location: /account?next=' . urlencode('/profile')); exit; }
-
 $user = currentUser();
-if (!$user) { header('Location: /account?next=' . urlencode('/profile')); exit; }
-
 $lang = function_exists('currentLang') ? currentLang() : 'it';
 $de   = $lang === 'de';
 $csrf = csrfToken();
 function L($it, $deTxt, $de) { return $de ? $deTxt : $it; }
-
-// Dati extra: registrazione, ultimo accesso, n. veicoli, n. dispositivi "ricordami"
-$created = $lastLogin = null; $nVehicles = 0; $nDevices = 0;
+$created = $lastLogin = null; $nVehicles = 0;
 try {
     $st = pdo()->prepare('SELECT created_at, last_login FROM users WHERE id=:id');
     $st->execute([':id' => $user['id']]);
@@ -22,23 +17,20 @@ try {
     $st = pdo()->prepare('SELECT count(*) FROM vehicles WHERE user_id=:id');
     $st->execute([':id' => $user['id']]);
     $nVehicles = (int)$st->fetchColumn();
-    $st = pdo()->prepare('SELECT count(*) FROM auth_tokens WHERE user_id=:id AND expires_at > now()');
-    $st->execute([':id' => $user['id']]);
-    $nDevices = (int)$st->fetchColumn();
 } catch (Throwable $e) {}
-
 function fmtDate($ts, $de) {
     if (!$ts) return '—';
     $t = strtotime($ts);
     return $t ? date($de ? 'd.m.Y H:i' : 'd/m/Y H:i', $t) : '—';
 }
+$linked = (int)($user['linked'] ?? 0) === 1;
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars($lang) ?>">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FuelFinder — <?= L('Il tuo account','Dein Konto',$de) ?></title>
+<title>FuelFinder — <?= L('I miei dati','Meine Daten',$de) ?></title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="stylesheet" href="/fonts/fonts.css">
@@ -68,9 +60,9 @@ h1{font-size:1.35rem;letter-spacing:-.02em;margin:0 0 22px}
 form{display:flex;flex-direction:column;gap:7px}
 label{font-size:.75rem;color:var(--muted);margin-top:8px}
 .hint{color:var(--faint)}
-input[type=password]{background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:12px 13px;color:var(--fg);font-family:inherit;font-size:.92rem;width:100%}
+input[type=password],input[type=text]{background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:12px 13px;color:var(--fg);font-family:inherit;font-size:.92rem;width:100%}
 input:focus{outline:none;border-color:var(--accent)}
-button{font-family:inherit;cursor:pointer;border-radius:10px;font-size:.88rem;font-weight:600;border:none;padding:12px 16px;transition:background .2s,border-color .2s,color .2s}
+button,.btn-primary,.btn-line{font-family:inherit;cursor:pointer;border-radius:10px;font-size:.88rem;font-weight:600;border:none;padding:12px 16px;transition:background .2s,border-color .2s,color .2s}
 .btn-primary{margin-top:14px;background:var(--accent);color:var(--on-accent);font-weight:700}
 .btn-primary:hover{background:var(--accent2)}
 .btn-line{background:none;border:1px solid var(--line2);color:var(--fg)}
@@ -86,6 +78,10 @@ button{font-family:inherit;cursor:pointer;border-radius:10px;font-size:.88rem;fo
 .sess-note{font-size:.8rem;color:var(--muted);margin:0 0 12px}
 .foot{text-align:center;font-size:.76rem;color:var(--faint);margin-top:8px}
 .foot a{color:var(--muted);text-decoration:none}.foot a:hover{color:var(--accent)}
+
+.lead{color:var(--muted);font-size:.88rem;margin:0 0 16px}
+.btn-primary,.btn-line{display:inline-block;text-decoration:none;text-align:center}
+.notice{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:12px 14px;font-size:.85rem;color:#fcd34d;margin:0 0 14px}
 </style>
 </head>
 <body>
@@ -95,56 +91,41 @@ button{font-family:inherit;cursor:pointer;border-radius:10px;font-size:.88rem;fo
         <a class="back" href="/">&larr; <?= L('Torna all\'app','Zurück zur App',$de) ?></a>
     </div>
 
-    <h1><?= L('Il tuo account','Dein Konto',$de) ?></h1>
+    <h1><?= L('I miei dati FuelFinder','Meine FuelFinder-Daten',$de) ?></h1>
 
     <div class="card">
-        <h2><?= L('Profilo','Profil',$de) ?></h2>
+        <h2><?= L('Account fmenegazzi','fmenegazzi-Konto',$de) ?></h2>
         <div class="kv"><span class="k">Email</span><span class="v mono"><?= htmlspecialchars($user['email']) ?></span></div>
-        <div class="kv"><span class="k"><?= L('Stato','Status',$de) ?></span><span class="v">
-            <?php if ((int)$user['email_verified'] === 1): ?><span class="badge ok"><?= L('VERIFICATA','VERIFIZIERT',$de) ?></span>
-            <?php else: ?><span class="badge warn"><?= L('NON VERIFICATA','NICHT VERIFIZIERT',$de) ?></span><?php endif; ?>
-            <?php if ((int)$user['is_admin'] === 1): ?> <span class="badge admin">ADMIN</span><?php endif; ?>
-        </span></div>
+        <?php if ($linked): ?>
+            <p class="lead" style="margin-top:14px"><?= L('Profilo, email, password e verifica in due passaggi si gestiscono sul tuo account fmenegazzi, valido per tutti gli strumenti.','Profil, E-Mail, Passwort und Zwei-Faktor-Anmeldung verwaltest du in deinem fmenegazzi-Konto, gültig für alle Tools.',$de) ?></p>
+            <a class="btn-primary" href="<?= htmlspecialchars(ACCOUNT_PAGE_URL) ?>"><?= L('Gestisci il mio account','Mein Konto verwalten',$de) ?> &rarr;</a>
+        <?php else: ?>
+            <p class="notice" style="margin-top:14px"><?= L('Il tuo account FuelFinder non è ancora collegato all\'account unico fmenegazzi. Collegalo con la stessa email: garage e dati restano tuoi.','Dein FuelFinder-Konto ist noch nicht mit dem fmenegazzi-Konto verknüpft. Verknüpfe es mit derselben E-Mail: Garage und Daten bleiben erhalten.',$de) ?></p>
+            <a class="btn-primary" href="/oidc?start&amp;force=1&amp;next=%2Fprofile"><?= L('Collega ora','Jetzt verknüpfen',$de) ?></a>
+        <?php endif; ?>
+    </div>
+
+    <div class="card">
+        <h2><?= L('Dati FuelFinder','FuelFinder-Daten',$de) ?></h2>
         <div class="kv"><span class="k"><?= L('Registrato il','Registriert am',$de) ?></span><span class="v mono"><?= fmtDate($created, $de) ?></span></div>
         <div class="kv"><span class="k"><?= L('Ultimo accesso','Letzte Anmeldung',$de) ?></span><span class="v mono"><?= fmtDate($lastLogin, $de) ?></span></div>
         <div class="kv"><span class="k"><?= L('Veicoli in garage','Fahrzeuge in der Garage',$de) ?></span><span class="v mono"><?= $nVehicles ?></span></div>
-    </div>
-
-    <div class="card">
-        <h2><?= L('Cambia password','Passwort ändern',$de) ?></h2>
-        <form id="pwForm" autocomplete="off">
-            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
-            <label><?= L('Password attuale','Aktuelles Passwort',$de) ?></label>
-            <input type="password" name="current" autocomplete="current-password" required>
-            <label><?= L('Nuova password','Neues Passwort',$de) ?> <span class="hint">(<?= L('min. 8 caratteri','min. 8 Zeichen',$de) ?>)</span></label>
-            <input type="password" name="password" autocomplete="new-password" minlength="8" required>
-            <label><?= L('Conferma nuova password','Neues Passwort bestätigen',$de) ?></label>
-            <input type="password" name="confirm" autocomplete="new-password" minlength="8" required>
-            <button type="submit" class="btn-primary"><?= L('Aggiorna password','Passwort aktualisieren',$de) ?></button>
-            <div class="msg" id="pwMsg"></div>
-        </form>
-    </div>
-
-    <div class="card">
-        <h2><?= L('Sessioni e dispositivi','Sitzungen & Geräte',$de) ?></h2>
-        <p class="sess-note"><?= $nDevices > 0
-            ? L('Hai <b>' . $nDevices . '</b> dispositivi con accesso "ricordami" attivo.','Du hast <b>' . $nDevices . '</b> Geräte mit aktivem „Angemeldet bleiben".',$de)
-            : L('Nessun dispositivo con accesso "ricordami" attivo.','Keine Geräte mit aktivem „Angemeldet bleiben".',$de) ?></p>
-        <div class="row-btns">
-            <button type="button" class="btn-line" id="logoutBtn"><?= L('Esci','Abmelden',$de) ?></button>
-            <button type="button" class="btn-line" id="logoutAllBtn"><?= L('Disconnetti tutti i dispositivi','Alle Geräte abmelden',$de) ?></button>
+        <?php if ((int)$user['is_admin'] === 1): ?>
+        <div class="kv"><span class="k"><?= L('Ruolo','Rolle',$de) ?></span><span class="v"><span class="badge admin">ADMIN</span> <a href="/stats" style="color:var(--accent2)"><?= L('Metriche','Statistiken',$de) ?> &rarr;</a></span></div>
+        <?php endif; ?>
+        <div class="row-btns" style="margin-top:14px">
+            <a class="btn-line" href="/oidc?logout"><?= L('Esci','Abmelden',$de) ?></a>
         </div>
-        <div class="msg" id="sessMsg"></div>
     </div>
 
     <div class="card danger-card">
         <h2><?= L('Zona pericolosa','Gefahrenzone',$de) ?></h2>
-        <p class="danger-note"><?= L('L\'eliminazione è definitiva: account, garage e dati associati vengono cancellati subito e non sono recuperabili.','Die Löschung ist endgültig: Konto, Garage und zugehörige Daten werden sofort und unwiderruflich gelöscht.',$de) ?></p>
+        <p class="danger-note"><?= L('Cancella il tuo account FuelFinder e il garage, subito e senza possibilità di recupero. Il tuo account fmenegazzi e gli altri strumenti non vengono toccati.','Löscht dein FuelFinder-Konto und die Garage sofort und unwiderruflich. Dein fmenegazzi-Konto und die anderen Tools bleiben unberührt.',$de) ?></p>
         <form id="delForm">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
-            <label><?= L('Conferma con la tua password','Mit deinem Passwort bestätigen',$de) ?></label>
-            <input type="password" name="password" autocomplete="current-password" required>
-            <button type="submit" class="btn-danger"><?= L('Elimina definitivamente l\'account','Konto endgültig löschen',$de) ?></button>
+            <label><?= L('Scrivi ELIMINA per confermare','Zum Bestätigen LÖSCHEN eingeben',$de) ?></label>
+            <input type="text" name="confirm" autocomplete="off" required>
+            <button type="submit" class="btn-danger"><?= L('Elimina i miei dati FuelFinder','Meine FuelFinder-Daten löschen',$de) ?></button>
             <div class="msg" id="delMsg"></div>
         </form>
     </div>
@@ -154,44 +135,17 @@ button{font-family:inherit;cursor:pointer;border-radius:10px;font-size:.88rem;fo
 <script>
 var MSG = {
     csrf: <?= json_encode(L('Sessione scaduta, ricarica la pagina.','Sitzung abgelaufen, Seite neu laden.',$de)) ?>,
-    wrong_password: <?= json_encode(L('Password attuale non corretta.','Aktuelles Passwort falsch.',$de)) ?>,
-    password_short: <?= json_encode(L('Password troppo corta (min 8).','Passwort zu kurz (min. 8).',$de)) ?>,
-    mismatch: <?= json_encode(L('Le nuove password non coincidono.','Die neuen Passwörter stimmen nicht überein.',$de)) ?>,
-    db_error: <?= json_encode(L('Errore temporaneo, riprova.','Temporärer Fehler, erneut versuchen.',$de)) ?>,
-    pw_ok: <?= json_encode(L('✓ Password aggiornata. Gli altri dispositivi dovranno riaccedere.','✓ Passwort aktualisiert. Andere Geräte müssen sich neu anmelden.',$de)) ?>,
-    del_confirm: <?= json_encode(L('Eliminare definitivamente account e tutti i dati? L\'operazione non è reversibile.','Konto und alle Daten endgültig löschen? Dies kann nicht rückgängig gemacht werden.',$de)) ?>
+    confirm: <?= json_encode(L('Scrivi ELIMINA per confermare.','Gib LÖSCHEN zum Bestätigen ein.',$de)) ?>,
+    db_error: <?= json_encode(L('Errore temporaneo, riprova.','Temporärer Fehler, erneut versuchen.',$de)) ?>
 };
-function post(fd){ return fetch('/account',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();}); }
-
-var pwForm = document.getElementById('pwForm');
-pwForm.addEventListener('submit', function(e){
-    e.preventDefault();
-    var el = document.getElementById('pwMsg'); el.className = 'msg'; el.textContent = '';
-    if (pwForm.password.value !== pwForm.confirm.value) { el.textContent = MSG.mismatch; return; }
-    var fd = new FormData(pwForm); fd.append('action','change_password');
-    post(fd).then(function(d){
-        if (d.ok) { el.className = 'msg ok'; el.textContent = MSG.pw_ok; pwForm.reset(); }
-        else { el.textContent = MSG[d.error] || MSG.db_error; }
-    }).catch(function(){ el.textContent = MSG.db_error; });
-});
-
-document.getElementById('logoutBtn').addEventListener('click', function(){
-    var fd = new FormData(); fd.append('action','logout'); fd.append('csrf',<?= json_encode($csrf) ?>);
-    post(fd).then(function(){ location.href = '/'; });
-});
-document.getElementById('logoutAllBtn').addEventListener('click', function(){
-    var fd = new FormData(); fd.append('action','logout_all'); fd.append('csrf',<?= json_encode($csrf) ?>);
-    post(fd).then(function(){ location.href = '/'; });
-});
-
 var delForm = document.getElementById('delForm');
 delForm.addEventListener('submit', function(e){
     e.preventDefault();
-    if (!confirm(MSG.del_confirm)) return;
     var el = document.getElementById('delMsg'); el.className = 'msg'; el.textContent = '';
     var fd = new FormData(delForm); fd.append('action','delete_account');
-    post(fd).then(function(d){
-        if (d.ok) { location.href = '/'; }
+    fetch('/account',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+        // Esce anche dall'account unico: altrimenti il rientro automatico ricreerebbe un account vuoto
+        if (d.ok) { location.href = '/oidc?logout'; }
         else { el.textContent = MSG[d.error] || MSG.db_error; }
     }).catch(function(){ el.textContent = MSG.db_error; });
 });

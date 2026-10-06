@@ -17,6 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($action === 'register') {
+        // Le nuove registrazioni passano dall'account unico fmenegazzi
+        if (oidcEnabled()) { echo json_encode(['ok' => false, 'error' => 'registration_closed']); exit; }
         [$ok, $res] = register($_POST['email'] ?? '', $_POST['password'] ?? '');
         if ($ok) { track('signup'); echo json_encode(['ok' => true, 'verify' => true]); }
         else      echo json_encode(['ok' => false, 'error' => $res]);
@@ -59,12 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok' => true]); // sempre ok (anti-enumeration)
         exit;
     }
-    if ($action === 'change_password') {
-        if (!isLoggedIn()) { echo json_encode(['ok' => false, 'error' => 'auth']); exit; }
-        [$ok, $err] = changePassword(currentUserId(), $_POST['current'] ?? '', $_POST['password'] ?? '');
-        echo json_encode($ok ? ['ok' => true] : ['ok' => false, 'error' => $err]);
-        exit;
-    }
     if ($action === 'logout_all') {
         if (!isLoggedIn()) { echo json_encode(['ok' => false, 'error' => 'auth']); exit; }
         try { pdo()->prepare('DELETE FROM auth_tokens WHERE user_id=:u')->execute([':u' => currentUserId()]); } catch (Throwable $e) {}
@@ -73,14 +69,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($action === 'delete_account') {
+        // Elimina i dati di FuelFinder (account locale, garage). L'account fmenegazzi resta.
         if (!isLoggedIn()) { echo json_encode(['ok' => false, 'error' => 'auth']); exit; }
-        $uid = currentUserId();
-        // Azione irreversibile: richiede la password corrente
-        if (!verifyUserPassword($uid, $_POST['password'] ?? '')) {
-            echo json_encode(['ok' => false, 'error' => 'wrong_password']); exit;
+        $confirm = mb_strtoupper(trim((string)($_POST['confirm'] ?? '')));
+        if (!in_array($confirm, ['ELIMINA', 'LÖSCHEN', 'LOESCHEN'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'confirm']); exit;
         }
-        deleteAccount($uid);
-        logout();
+        deleteAccount(currentUserId());
+        // Tiene l'id_token: il client prosegue con /oidc?logout (esce anche dall'account unico,
+        // altrimenti il rientro automatico ricreerebbe subito un account FuelFinder vuoto)
+        unset($_SESSION['uid'], $_SESSION['sv']);
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -140,7 +138,11 @@ $de   = $lang === 'de';
 $next = $_GET['next'] ?? '/';
 if (!is_string($next) || $next === '' || $next[0] !== '/' || strpos($next, '//') === 0) $next = '/';
 $verifiedMsg = $_GET['verified'] ?? null; // '1' = email appena verificata, '0' = link non valido
-$tab  = (($_GET['tab'] ?? '') === 'register') ? 'register' : 'login';
+$ssoError = isset($_GET['sso_error']) ? preg_replace('/[^a-z_]/', '', (string)$_GET['sso_error']) : null;
+// /account?tab=register (vecchi link) → registrazione sull'account unico
+if (($_GET['tab'] ?? '') === 'register' && oidcEnabled() && !isLoggedIn()) {
+    header('Location: /oidc?start&register=1&next=' . urlencode($next)); exit;
+}
 $csrf = csrfToken();
 if (isLoggedIn()) { header('Location: ' . $next); exit; }
 function L($it, $deTxt, $de) { return $de ? $deTxt : $it; }
@@ -150,7 +152,7 @@ function L($it, $deTxt, $de) { return $de ? $deTxt : $it; }
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FuelFinder — <?= $tab === 'register' ? L('Registrati','Registrieren',$de) : L('Accedi','Anmelden',$de) ?></title>
+<title>FuelFinder — <?= L('Accedi','Anmelden',$de) ?></title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="stylesheet" href="/fonts/fonts.css">
@@ -163,6 +165,18 @@ body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-ser
 .auth-box{width:100%;max-width:380px}
 .auth-brand{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;color:var(--fg);font-weight:700;font-size:1.2rem;letter-spacing:-.01em;margin-bottom:24px}
 .auth-brand b{color:var(--accent)}
+.auth-title{font-size:1.35rem;letter-spacing:-.02em;margin:0 0 18px;text-align:center}
+.sso-btn{display:block;text-align:center;background:var(--accent);color:#04211a;border-radius:10px;padding:13px;font-weight:700;font-size:.92rem;text-decoration:none;margin-top:10px}
+.sso-btn:hover{background:#34d399}
+.sso-btn.alt{background:transparent;color:var(--fg);border:1px solid var(--line2)}
+.sso-btn.alt:hover{border-color:var(--accent);background:rgba(16,185,129,.08)}
+.sso-note{font-size:.8rem;color:var(--muted);text-align:center;margin:14px 0 0}
+.sso-note a{color:var(--fg)}
+.sso-err{margin:0 0 6px}
+.legacy{margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
+.legacy summary{cursor:pointer;font-size:.82rem;color:var(--muted);text-align:center;list-style:none}
+.legacy summary::-webkit-details-marker{display:none}
+.legacy summary:hover{color:var(--fg)}
 .tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:4px;margin-bottom:20px}
 .tab{flex:1;padding:9px;border:none;background:none;color:var(--muted);border-radius:8px;cursor:pointer;font-family:inherit;font-weight:600;font-size:.86rem}
 .tab.on{background:var(--accent);color:#04211a}
@@ -192,12 +206,21 @@ body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-ser
 <main class="auth">
     <div class="auth-box">
         <a class="auth-brand" href="/"><img src="img/logo.svg" width="30" height="30" alt="">Fuel<b>Finder</b></a>
-        <div class="tabs">
-            <button class="tab<?= $tab==='login'?' on':'' ?>" data-tab="login" type="button"><?= L('Accedi','Anmelden',$de) ?></button>
-            <button class="tab<?= $tab==='register'?' on':'' ?>" data-tab="register" type="button"><?= L('Registrati','Registrieren',$de) ?></button>
-        </div>
+        <h1 class="auth-title"><?= L('Accedi','Anmelden',$de) ?></h1>
+        <?php if ($ssoError): ?><div class="msg sso-err" role="alert"><?= htmlspecialchars([
+            'email_not_verified' => L('Conferma prima la tua email sull\'account fmenegazzi, poi riprova.','Bestätige zuerst deine E-Mail im fmenegazzi-Konto und versuche es erneut.',$de),
+            'email_in_use'       => L('Questa email è già collegata a un altro account fmenegazzi.','Diese E-Mail ist bereits mit einem anderen fmenegazzi-Konto verknüpft.',$de),
+            'access_denied'      => L('Accesso annullato.','Anmeldung abgebrochen.',$de),
+            'unavailable'        => L('L\'account unico non è raggiungibile. Riprova tra poco.','Das Konto ist gerade nicht erreichbar. Bitte später erneut versuchen.',$de),
+        ][$ssoError] ?? L('Accesso non riuscito. Riprova.','Anmeldung fehlgeschlagen. Bitte erneut versuchen.',$de)) ?></div><?php endif; ?>
+        <a class="sso-btn" href="/oidc?start&amp;next=<?= urlencode($next) ?>"><?= L('Accedi con account fmenegazzi','Mit fmenegazzi-Konto anmelden',$de) ?></a>
+        <a class="sso-btn alt" href="/oidc?start&amp;register=1&amp;next=<?= urlencode($next) ?>"><?= L('Crea un account gratuito','Kostenloses Konto erstellen',$de) ?></a>
+        <p class="sso-note"><?= L('Un solo account per FuelFinder, SubTracker, FoodWaste e gli altri strumenti di','Ein Konto für FuelFinder, SubTracker, FoodWaste und die anderen Tools von',$de) ?> <a href="https://www.fmenegazzi.it">fmenegazzi.it</a>.</p>
 
-        <form class="form<?= $tab==='login'?'':' hide' ?>" id="loginForm">
+        <details class="legacy"<?= ($verifiedMsg !== null || isset($_GET['legacy'])) ? ' open' : '' ?>>
+        <summary><?= L('Hai un vecchio account FuelFinder con password?','Du hast ein altes FuelFinder-Konto mit Passwort?',$de) ?></summary>
+        <p class="sso-note"><?= L('Se hai già usato l\'account fmenegazzi, la vecchia password non vale più: accedi con il pulsante qui sopra.','Wenn du schon das fmenegazzi-Konto genutzt hast, gilt das alte Passwort nicht mehr: melde dich oben an.',$de) ?></p>
+        <form class="form" id="loginForm">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
             <label><?= L('Email','E-Mail',$de) ?></label>
             <input type="email" name="email" autocomplete="email" required>
@@ -212,16 +235,6 @@ body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-ser
             <div class="forgot"><a href="#" id="forgotLink"><?= L('Password dimenticata?','Passwort vergessen?',$de) ?></a></div>
         </form>
 
-        <form class="form<?= $tab==='register'?'':' hide' ?>" id="registerForm">
-            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
-            <label><?= L('Email','E-Mail',$de) ?></label>
-            <input type="email" name="email" autocomplete="email" required>
-            <label>Password <span class="hint">(<?= L('min. 8 caratteri','min. 8 Zeichen',$de) ?>)</span></label>
-            <input type="password" name="password" autocomplete="new-password" minlength="8" required>
-            <button type="submit"><?= L('Crea account','Konto erstellen',$de) ?></button>
-            <div class="msg" id="registerMsg"></div>
-        </form>
-
         <form class="form hide" id="resetForm">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf) ?>">
             <label><?= L('Inserisci la tua email','Gib deine E-Mail ein',$de) ?></label>
@@ -230,6 +243,7 @@ body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-ser
             <div class="msg" id="resetMsg"></div>
             <div class="forgot"><a href="#" id="resetBack"><?= L('Torna al login','Zurück zur Anmeldung',$de) ?></a></div>
         </form>
+        </details>
 
         <a class="back" href="/">&larr; <?= L('Torna al sito','Zurück zur Seite',$de) ?></a>
     </div>
@@ -251,10 +265,8 @@ var MSG = {
     verify_sent: <?= json_encode(L('✓ Ti abbiamo inviato un\'email di verifica. Confermala per accedere.','✓ Wir haben dir eine Bestätigungs-E-Mail geschickt. Bestätige sie, um dich anzumelden.',$de)) ?>,
     reset_sent: <?= json_encode(L('Se l\'email esiste, ti abbiamo inviato un link.','Falls die E-Mail existiert, wurde ein Link gesendet.',$de)) ?>
 };
-var lf=document.getElementById('loginForm'), rf=document.getElementById('registerForm'), zf=document.getElementById('resetForm');
-function show(which){ lf.classList.toggle('hide',which!=='login'); rf.classList.toggle('hide',which!=='register'); zf.classList.toggle('hide',which!=='reset');
-    document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('on',t.dataset.tab===which);}); }
-document.querySelectorAll('.tab').forEach(function(t){ t.addEventListener('click',function(){show(t.dataset.tab);}); });
+var lf=document.getElementById('loginForm'), zf=document.getElementById('resetForm');
+function show(which){ lf.classList.toggle('hide',which!=='login'); zf.classList.toggle('hide',which!=='reset'); }
 document.getElementById('forgotLink').addEventListener('click',function(e){e.preventDefault();show('reset');});
 document.getElementById('resetBack').addEventListener('click',function(e){e.preventDefault();show('login');});
 
@@ -269,9 +281,6 @@ lf.addEventListener('submit',function(e){ e.preventDefault(); var el=document.ge
                 fetch('/account',{method:'POST',body:fd,credentials:'same-origin'}).then(function(){el.className='msg ok';el.textContent=MSG.resent;}); });
         } else { el.textContent=MSG[d.error]||MSG.db_error; }
     }).catch(function(){el.textContent=MSG.db_error;});
-});
-rf.addEventListener('submit',function(e){ e.preventDefault(); var el=document.getElementById('registerMsg'); el.className='msg';
-    post(rf,'register').then(function(d){ if(d.ok){ el.className='msg ok'; el.textContent=MSG.verify_sent; rf.reset(); } else { el.textContent=MSG[d.error]||MSG.db_error; } }).catch(function(){el.textContent=MSG.db_error;});
 });
 zf.addEventListener('submit',function(e){ e.preventDefault(); var el=document.getElementById('resetMsg'); el.className='msg';
     post(zf,'request_reset').then(function(){ el.className='msg ok'; el.textContent=MSG.reset_sent; }).catch(function(){el.textContent=MSG.db_error;});

@@ -324,6 +324,10 @@ input[type="number"]{-moz-appearance:textfield}
     .route-map-panel{border-radius:0}
 }
 
+/* ===== MENU STRUMENTI (fm-switcher, da www.fmenegazzi.it) ===== */
+.ff-switcher{margin-left:6px;z-index:1100}
+@media(max-width:420px){.ff-switcher{margin-left:0}}
+
 /* ===== ACCOUNT WIDGET ===== */
 .acct-wrap{position:relative;display:flex;align-items:center;margin-left:6px;z-index:1100}
 .acct-btn{cursor:pointer;border:1px solid var(--glass-border,#2c3a50);background:var(--glass,rgba(255,255,255,.04));color:#f1f5f9;border-radius:10px;font-family:inherit;font-weight:600}

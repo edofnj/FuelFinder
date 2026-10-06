@@ -4,7 +4,9 @@
 CREATE TABLE IF NOT EXISTS users (
     id             BIGSERIAL PRIMARY KEY,
     email          TEXT NOT NULL,
-    password_hash  TEXT NOT NULL,
+    password_hash  TEXT,                       -- NULL per gli utenti dell'account unico
+    zitadel_sub    TEXT,                       -- id utente su account.fmenegazzi.it
+    session_version INTEGER NOT NULL DEFAULT 0, -- incrementata per invalidare le sessioni aperte
     is_admin       BOOLEAN NOT NULL DEFAULT FALSE,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     verify_token   TEXT,
@@ -14,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 -- Email case-insensitive univoca (niente dipendenza da citext)
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uidx ON users (lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS users_zitadel_sub_uidx ON users (zitadel_sub);
 
 -- Token "ricordami" persistente (sopravvive ai restart del container)
 CREATE TABLE IF NOT EXISTS auth_tokens (

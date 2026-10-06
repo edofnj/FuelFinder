@@ -60,17 +60,18 @@ ErrorDocument 500 /500.php
     # (REQUEST_URI resta /pagina, senza .php).
     RewriteCond %{REQUEST_FILENAME} \.php$
     RewriteCond %{REQUEST_URI} \.php
-    RewriteCond %{REQUEST_URI} !/(index|route|account|profile|garage|stats|track|privacy|geocode|tiles|tos|landing|404|500|403)\.php$
+    RewriteCond %{REQUEST_URI} !/(index|route|account|profile|garage|stats|track|privacy|geocode|tiles|tos|landing|oidc|404|500|403)\.php$
     RewriteRule .* - [F,L]
 </IfModule>
 
 # Security headers
+# www.fmenegazzi.it: menu condiviso degli strumenti (<fm-switcher>, script + icone)
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     Header set Permissions-Policy "geolocation=(self), camera=(), microphone=()"
-    Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+    Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.fmenegazzi.it; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.fmenegazzi.it; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
     Header always unset X-Powered-By
     Header unset X-Powered-By
 </IfModule>

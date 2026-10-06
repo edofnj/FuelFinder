@@ -2,9 +2,12 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/metrics.php';
 require_once __DIR__ . '/mailer.php';
+require_once __DIR__ . '/oidc.php';
 
 // L'email che diventa admin automaticamente alla registrazione.
 if (!defined('ADMIN_EMAIL')) define('ADMIN_EMAIL', 'edoardo@fmenegazzi.it');
+// Hash bcrypt fittizio (password casuale) per uniformare i tempi del login legacy
+const LEGACY_DUMMY_HASH = '$2y$10$00.V8Baq7TLyDt.YWYJIQu/lyfF36GTBfo.gN57zRggSBRrF46sse';
 
 function requestIsHttps() {
     return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -29,20 +32,41 @@ function authBoot() {
     if (empty($_SESSION['uid']) && !empty($_COOKIE['ff_remember'])) {
         rememberLogin($_COOKIE['ff_remember']);
     }
+    // Già entrato in un altro strumento con l'account unico → rientro automatico
+    ssoAutoLogin();
 }
 
-function currentUserId() { return isset($_SESSION['uid']) ? (int)$_SESSION['uid'] : null; }
-function isLoggedIn()    { return !empty($_SESSION['uid']); }
+// Versione delle sessioni dell'utente: incrementandola (es. al collegamento con l'account unico)
+// le sessioni aperte prima smettono di valere.
+function currentSessionVersion($uid) {
+    try {
+        $st = pdo()->prepare('SELECT session_version FROM users WHERE id = :id');
+        $st->execute([':id' => $uid]);
+        return (int)$st->fetchColumn();
+    } catch (Throwable $e) { return 0; }
+}
 
-function currentUser() {
+// Passano da currentUser(): una sessione decaduta (session_version superata) risulta subito non loggata
+function currentUserId() { $u = currentUser(); return $u ? (int)$u['id'] : null; }
+function isLoggedIn()    { return currentUser() !== null; }
+
+// $refresh: rilegge dopo un login avvenuto nella stessa richiesta
+function currentUser($refresh = false) {
     static $cache = false;
+    if ($refresh) $cache = false;
     if ($cache !== false) return $cache;
     if (empty($_SESSION['uid'])) return $cache = null;
     try {
         // is_admin::int per evitare l'ambiguità del boolean PG via PDO ('f' è truthy in PHP)
-        $st = pdo()->prepare('SELECT id, email, is_admin::int AS is_admin, email_verified::int AS email_verified FROM users WHERE id = :id');
+        $st = pdo()->prepare('SELECT id, email, is_admin::int AS is_admin, email_verified::int AS email_verified,
+                              session_version, (zitadel_sub IS NOT NULL)::int AS linked FROM users WHERE id = :id');
         $st->execute([':id' => $_SESSION['uid']]);
         $u = $st->fetch();
+        // Sessione aperta prima dell'ultimo cambio di versione (es. collegamento all'account unico): non vale più
+        if ($u && (int)($_SESSION['sv'] ?? 0) !== (int)$u['session_version']) {
+            unset($_SESSION['uid'], $_SESSION['sv'], $_SESSION['idt']);
+            $u = null;
+        }
         $cache = $u ?: null;
     } catch (Throwable $e) { $cache = null; }
     return $cache;
@@ -102,7 +126,9 @@ function login($email, $password, $remember = false) {
         $u = $st->fetch();
     } catch (Throwable $e) { return [false, 'db_error']; }
 
-    $ok = $u && password_verify($password, $u['password_hash']);
+    // Hash fittizio se l'utente non esiste o è già passato all'account unico (niente password locale):
+    // stessi tempi e stesso errore, nessun indizio su quali email sono registrate.
+    $ok = password_verify($password, ($u && $u['password_hash']) ? $u['password_hash'] : LEGACY_DUMMY_HASH) && $u && $u['password_hash'];
     if (!$ok) { recordAttempt($email, false); return [false, 'invalid']; }
     // Verifica email obbligatoria: niente login finché non confermata.
     if ((int)$u['email_verified'] !== 1) return [false, 'unverified'];
@@ -110,6 +136,8 @@ function login($email, $password, $remember = false) {
 
     session_regenerate_id(true);
     $_SESSION['uid'] = (int)$u['id'];
+    $_SESSION['sv'] = currentSessionVersion((int)$u['id']);
+    currentUser(true);
     try { pdo()->prepare('UPDATE users SET last_login = now() WHERE id = :id')->execute([':id' => $u['id']]); } catch (Throwable $e) {}
     if ($remember) setRememberCookie((int)$u['id']);
     return [true, (int)$u['id']];
@@ -169,6 +197,8 @@ function rememberLogin($cookie) {
         pdo()->prepare('DELETE FROM auth_tokens WHERE id = :id')->execute([':id' => (int)$id]);
         session_regenerate_id(true);
         $_SESSION['uid'] = (int)$row['user_id'];
+        $_SESSION['sv'] = currentSessionVersion((int)$row['user_id']);
+        currentUser(true);
         setRememberCookie((int)$row['user_id']);
     } catch (Throwable $e) { /* ignore */ }
 }

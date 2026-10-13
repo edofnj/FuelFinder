@@ -113,8 +113,6 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
 .d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.24s}.d4{animation-delay:.34s}
 @keyframes lr{to{opacity:1;transform:none}}
 @media(max-width:900px){.hero{grid-template-columns:1fr;gap:28px}.hero p.sub{max-width:none}}
-/* Mobile: i pulsanti della barra uscivano dallo schermo; gli stessi sono nella hero subito sotto */
-@media(max-width:640px){.lp-nav .lp-btn{display:none}.lp-nav .lang-switcher{margin-left:auto}}
 @media(prefers-reduced-motion:reduce){.rise{animation:none;opacity:1;transform:none}}
 </style>
 </head>
@@ -123,8 +121,6 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
     <nav class="lp-nav">
         <a class="logo-icon" href="/"><img src="img/logo.svg" alt="FuelFinder"></a>
         <div class="logo-text">Fuel<span>Finder</span></div>
-        <script src="https://www.fmenegazzi.it/fm-switcher.js" defer></script>
-        <fm-switcher current="fuelfinder" theme="dark" class="ff-switcher"></fm-switcher>
         <div class="header-badge">IT + DE · <?= L('dati ufficiali','offizielle Daten') ?></div>
         <div class="lang-switcher">
             <a href="?lang=it" class="lang-opt<?= $lang==='it'?' active':'' ?>">IT</a>
@@ -199,6 +195,6 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
         <span><?= L('Dati','Daten') ?>: MIMIT · <a href="https://creativecommons.tankerkoenig.de" target="_blank" rel="noopener">Tankerkönig</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span>
     </footer>
 </div>
-<script>function ffOpenAuth(t){location.href='/oidc?start'+(t==='register'?'&register=1':'');}</script>
+<script>function ffOpenAuth(t){location.href='/account?tab='+(t||'login');}</script>
 </body>
 </html>

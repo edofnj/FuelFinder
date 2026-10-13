@@ -2,11 +2,14 @@
 require 'includes/config.php';
 require 'includes/i18n.php';
 
-// "/" è l'unica home: l'app si vede solo da loggati o "ospiti" (cookie ff_guest,
+// "/" è l'unica home: l'app si vede solo da loggati o "ospiti" (cookie di sessione ff_guest,
 // impostato dal bottone "Prova senza account"); gli altri vedono la landing.
-if (isset($_GET['guest'])) {
-    setcookie('ff_guest', '1', ['expires' => time() + 86400 * 365, 'path' => '/', 'secure' => requestIsHttps(), 'samesite' => 'Lax']);
-    header('Location: /'); exit;
+// La prova vale solo nella scheda in cui è iniziata (controllo in <head>): chi chiude e
+// riapre il sito torna sulla landing. ?landing toglie il cookie e mostra la landing.
+if (isset($_GET['guest']) || isset($_GET['landing'])) {
+    $guest = isset($_GET['guest']);
+    setcookie('ff_guest', $guest ? '1' : '', ['expires' => $guest ? 0 : time() - 3600, 'path' => '/', 'secure' => requestIsHttps(), 'samesite' => 'Lax']);
+    header('Location: /' . ($guest ? '#ospite' : '')); exit;
 }
 if (!isLoggedIn() && empty($_COOKIE['ff_guest']) && $_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['verified'])) {
     require __DIR__ . '/landing.php';
@@ -21,6 +24,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') track('pageview');
 <html lang="<?= currentLang() ?>">
 <head>
 <meta charset="UTF-8">
+<?php if (!isLoggedIn() && !isset($_GET['verified'])): ?>
+<script>
+// Ospite: #ospite arriva da "Prova senza account" e segna la scheda; una scheda nuova
+// (sito chiuso e riaperto) senza il segno torna sulla landing, una volta sola per scheda.
+(function () {
+  try {
+    var s = sessionStorage;
+    if (location.hash === '#ospite') {
+      s.setItem('ff_guest', '1');
+      history.replaceState(null, '', location.pathname + location.search);
+    } else if (!s.getItem('ff_guest') && !s.getItem('ff_guest_reset')) {
+      s.setItem('ff_guest_reset', '1');
+      location.replace('/?landing');
+    }
+  } catch (e) {}
+})();
+</script>
+<?php endif; ?>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <?php
   $seoLang  = function_exists('currentLang') ? currentLang() : 'it';

@@ -60,6 +60,7 @@ Kontakt für Datenschutzanfragen: <a href="mailto:edoardo@fmenegazzi.it">edoardo
 <ul>
 <li><code>ff_sess</code> — Sitzungscookie (Login), notwendig.</li>
 <li><code>ff_remember</code> — nur wenn Sie „Angemeldet bleiben“ wählen, funktional.</li>
+<li><code>ff_guest</code> — nur wenn Sie „Ohne Konto testen“ wählen, bis zum Schließen des Browsers (dazu ein sessionStorage-Eintrag für den Tab), funktional.</li>
 <li>Sprach-Cookie — speichert die gewählte Sprache, funktional.</li>
 <li>localStorage — Einstellungen / aktives Fahrzeug, technisch.</li>
 </ul>
@@ -95,6 +96,7 @@ Contatto per richieste privacy: <a href="mailto:edoardo@fmenegazzi.it">edoardo@f
 <ul>
 <li><code>ff_sess</code> — cookie di sessione (login), necessario.</li>
 <li><code>ff_remember</code> — solo se scegli “Ricordami”, funzionale.</li>
+<li><code>ff_guest</code> — solo se scegli “Prova senza account”, fino alla chiusura del browser (più un dato in sessionStorage per la scheda), funzionale.</li>
 <li>cookie lingua — memorizza la lingua scelta, funzionale.</li>
 <li>localStorage — preferenze / veicolo attivo, tecnico.</li>
 </ul>

@@ -109,7 +109,7 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
 .final .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 
 /* footer */
-.lp-foot{margin-top:48px;padding:26px 0;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:.72rem;color:rgba(255,255,255,.3)}
+.lp-foot{margin-top:48px;padding:26px 0;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:.72rem;color:rgba(255,255,255,.48)}
 .lp-foot a{color:var(--muted);text-decoration:none}.lp-foot a:hover{color:var(--accent2)}
 .lp-foot .sp{flex:1}
 

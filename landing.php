@@ -29,8 +29,12 @@ $canon = 'https://fuelfinder.fmenegazzi.it/';
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b1220">
-<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>">
-<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
+<!-- Landing: CSS dentro la pagina (niente richieste che bloccano il primo rendering) e preload
+     dei font della prima schermata (Inter e JetBrains Mono, subset latin) -->
+<link rel="preload" href="/fonts/files/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/files/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2" as="font" type="font/woff2" crossorigin>
+<style><?= str_replace('url(files/', 'url(/fonts/files/', file_get_contents(__DIR__ . '/fonts/fonts.css')) ?></style>
+<style><?= file_get_contents(__DIR__ . '/style.css') ?></style>
 <style>
 /* landing nello stile dell'app (glassmorphism) — riusa le variabili di style.css */
 html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
@@ -109,7 +113,8 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
 .lp-foot a{color:var(--muted);text-decoration:none}.lp-foot a:hover{color:var(--accent2)}
 .lp-foot .sp{flex:1}
 
-.rise{opacity:0;transform:translateY(16px);animation:lr .6s ease forwards}
+/* opacity .01 e non 0: identico a occhio, ma l'LCP non aspetta la fine dell'animazione */
+.rise{opacity:.01;transform:translateY(16px);animation:lr .6s ease forwards}
 .d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.24s}.d4{animation-delay:.34s}
 @keyframes lr{to{opacity:1;transform:none}}
 @media(max-width:900px){.hero{grid-template-columns:1fr;gap:28px}.hero p.sub{max-width:none}}

@@ -29,9 +29,8 @@ $canon = 'https://fuelfinder.fmenegazzi.it/';
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b1220">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="/fonts/fonts.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>">
+<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 <style>
 /* landing nello stile dell'app (glassmorphism) — riusa le variabili di style.css */
 html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
@@ -95,7 +94,7 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 .stp{padding:22px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--border)}
 .stp .n{font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:var(--accent2)}
-.stp h4{font-size:1rem;font-weight:600;margin:10px 0 6px}
+.stp h3{font-size:1rem;font-weight:600;margin:10px 0 6px}
 .stp p{font-size:.88rem;color:var(--muted);line-height:1.5;margin:0}
 @media(max-width:680px){.steps{grid-template-columns:1fr}}
 
@@ -131,6 +130,7 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
         <button class="lp-btn primary" type="button" onclick="ffOpenAuth('register')"><?= L('Registrati','Registrieren') ?></button>
     </nav>
 
+    <main>
     <section class="hero">
         <div>
             <span class="kick rise d1"><span class="dot"></span><?= L('Italia e Germania · dati MIMIT / Tankerkönig','Italien und Deutschland · MIMIT / Tankerkönig') ?></span>
@@ -173,9 +173,9 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
         <div class="lbl"><?= L('Come funziona','So funktioniert es') ?></div>
         <h2><?= L('Tre passaggi','In drei Schritten') ?></h2>
         <div class="steps">
-            <div class="stp"><div class="n">01</div><h4><?= L('Posizione o percorso','Standort oder Route') ?></h4><p><?= L('GPS o un indirizzo. Anche da A a B.','GPS oder Adresse. Auch von A nach B.') ?></p></div>
-            <div class="stp"><div class="n">02</div><h4><?= L('Veicolo e quantità','Fahrzeug und Menge') ?></h4><p><?= L('Carburante, consumi, litri o budget.','Kraftstoff, Verbrauch, Liter oder Budget.') ?></p></div>
-            <div class="stp"><div class="n">03</div><h4><?= L('Costo reale','Echte Kosten') ?></h4><p><?= L('Ti diciamo dove conviene fare il pieno davvero.','Wir sagen dir, wo sich Tanken wirklich lohnt.') ?></p></div>
+            <div class="stp"><div class="n">01</div><h3><?= L('Posizione o percorso','Standort oder Route') ?></h3><p><?= L('GPS o un indirizzo. Anche da A a B.','GPS oder Adresse. Auch von A nach B.') ?></p></div>
+            <div class="stp"><div class="n">02</div><h3><?= L('Veicolo e quantità','Fahrzeug und Menge') ?></h3><p><?= L('Carburante, consumi, litri o budget.','Kraftstoff, Verbrauch, Liter oder Budget.') ?></p></div>
+            <div class="stp"><div class="n">03</div><h3><?= L('Costo reale','Echte Kosten') ?></h3><p><?= L('Ti diciamo dove conviene fare il pieno davvero.','Wir sagen dir, wo sich Tanken wirklich lohnt.') ?></p></div>
         </div>
     </section>
 
@@ -187,6 +187,8 @@ html,body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
             <a class="lp-btn ghost lg" href="/?guest=1"><?= L('Prova senza account','Ohne Konto testen') ?></a>
         </div>
     </section>
+
+    </main>
 
     <footer class="lp-foot">
         <span>© FuelFinder</span>

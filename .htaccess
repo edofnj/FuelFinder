@@ -75,5 +75,23 @@ ErrorDocument 500 /500.php
     Header unset X-Powered-By
 </IfModule>
 
+# Cache dei file statici
+<IfModule mod_headers.c>
+    # Font: i file non cambiano mai
+    <FilesMatch "\.woff2$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    # CSS/JS linkati con ?v=<filemtime>: l'URL cambia a ogni modifica, quindi cache lunga
+    <FilesMatch "\.(css|js)$">
+        <If "%{QUERY_STRING} =~ /(^|&)v=\d+/">
+            Header set Cache-Control "public, max-age=31536000, immutable"
+        </If>
+    </FilesMatch>
+    # Immagini e icone: un mese
+    <FilesMatch "\.(svg|png|ico|webp|jpg)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
+
 # Disabilita listing directory
 Options -Indexes

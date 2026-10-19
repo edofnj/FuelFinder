@@ -41,7 +41,7 @@ function fmtDate($ts, $de) {
 <title>FuelFinder — <?= L('Il tuo account','Dein Konto',$de) ?></title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>">
 <style>
 :root{--bg:#0b1220;--fg:#f1f5f9;--muted:#94a3b8;--faint:#64748b;--line:#1e293b;--line2:#2c3a50;--card:#111a2b;--accent:#10b981;--accent2:#34d399;--on-accent:#04211a;--red:#f87171}
 *{box-sizing:border-box}

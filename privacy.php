@@ -13,8 +13,8 @@ $updated = '25/06/2026';
 <title>FuelFinder — <?= $de ? 'Datenschutz' : 'Privacy &amp; Cookie' ?></title>
 <meta name="robots" content="noindex, follow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-<link rel="stylesheet" href="/fonts/fonts.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>">
+<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 <style>
   /* override del layout PWA a viewport fisso: pagina di contenuto scrollabile */
   html,body{height:auto;min-height:100%;overflow:auto}

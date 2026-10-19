@@ -106,7 +106,7 @@ if (isset($_GET['reset'])) {
 <title>FuelFinder — <?= $rde ? 'Neues Passwort' : 'Nuova password' ?></title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-<link rel="stylesheet" href="/fonts/fonts.css"><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>"><link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 <style>html,body{height:auto;min-height:100%;overflow:auto}</style></head><body>
 <div class="auth-page"><div class="auth-card">
     <a class="auth-logo" href="/"><img src="img/logo.svg" width="40" height="40" alt=""><span>Fuel<b>Finder</b></span></a>
@@ -155,7 +155,7 @@ function L($it, $deTxt, $de) { return $de ? $deTxt : $it; }
 <title>FuelFinder — <?= $tab === 'register' ? L('Registrati','Registrieren',$de) : L('Accedi','Anmelden',$de) ?></title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>">
 <style>
 :root{--bg:#0b1220;--fg:#f1f5f9;--muted:#94a3b8;--faint:#64748b;--line:#1e293b;--line2:#2c3a50;--card:#111a2b;--accent:#10b981}
 *{box-sizing:border-box}

@@ -13,8 +13,8 @@ $updated = '25/06/2026';
 <title>FuelFinder — <?= $de ? 'Nutzungsbedingungen' : 'Termini di Servizio' ?></title>
 <meta name="robots" content="noindex, follow">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-<link rel="stylesheet" href="/fonts/fonts.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/fonts/fonts.css?v=<?= filemtime(__DIR__ . '/fonts/fonts.css') ?>">
+<link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 <style>
   html,body{height:auto;min-height:100%;overflow:auto}
   .legal{max-width:780px;margin:0 auto;padding:28px 20px 60px;color:#f1f5f9;font-family:Inter,system-ui,sans-serif;line-height:1.6}
